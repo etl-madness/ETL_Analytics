@@ -7,42 +7,42 @@ GO
 
   -- 7045kHz_AdvWorks_Sales_Processing_0 (Target: ~15m)
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_Sales_Processing_0', 'SUCCESS', 15.30, DATEADD(day, -1, GETUTCDATE()));
+    VALUES ('7045kHz_AdvWorks_Sales_Processing_0', 'ENABLED', 15.30, DATEADD(day, -1, GETUTCDATE()));
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_Sales_Processing_0', 'SUCCESS', 15.70, GETUTCDATE());
+    VALUES ('7045kHz_AdvWorks_Sales_Processing_0', 'ENABLED', 15.70, GETUTCDATE());
 
     -- 7045kHz_AdvWorks_Sales_Processing_15 (Target: ~18m)
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_Sales_Processing_15', 'SUCCESS', 18.05, DATEADD(day, -1, GETUTCDATE()));
+    VALUES ('7045kHz_AdvWorks_Sales_Processing_15', 'ENABLED', 18.05, DATEADD(day, -1, GETUTCDATE()));
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_Sales_Processing_15', 'SUCCESS', 18.40, GETUTCDATE());
+    VALUES ('7045kHz_AdvWorks_Sales_Processing_15', 'ENABLED', 18.40, GETUTCDATE());
 
     -- 7045kHz_AdvWorks_Sales_Processing_30 (Target: ~22m)
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_Sales_Processing_30', 'SUCCESS', 21.90, DATEADD(day, -1, GETUTCDATE()));
+    VALUES ('7045kHz_AdvWorks_Sales_Processing_30', 'ENABLED', 21.90, DATEADD(day, -1, GETUTCDATE()));
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_Sales_Processing_30', 'SUCCESS', 22.35, GETUTCDATE());
+    VALUES ('7045kHz_AdvWorks_Sales_Processing_30', 'ENABLED', 22.35, GETUTCDATE());
 
     -- 7045kHz_AdvWorks_Sales_Processing_45 (Target: ~25m)
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_Sales_Processing_45', 'SUCCESS', 24.60, DATEADD(day, -1, GETUTCDATE()));
+    VALUES ('7045kHz_AdvWorks_Sales_Processing_45', 'ENABLED', 24.60, DATEADD(day, -1, GETUTCDATE()));
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_Sales_Processing_45', 'SUCCESS', 25.10, GETUTCDATE());
+    VALUES ('7045kHz_AdvWorks_Sales_Processing_45', 'ENABLED', 25.10, GETUTCDATE());
 
     -- 7045kHz_AdvWorks_Currency_Rate_Updates_35 (Target: ~12m)
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_Currency_Rate_Updates_35', 'SUCCESS', 11.85, DATEADD(day, -1, GETUTCDATE()));
+    VALUES ('7045kHz_AdvWorks_Currency_Rate_Updates_35', 'ENABLED', 11.85, DATEADD(day, -1, GETUTCDATE()));
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_Currency_Rate_Updates_35', 'SUCCESS', 12.20, GETUTCDATE());
+    VALUES ('7045kHz_AdvWorks_Currency_Rate_Updates_35', 'ENABLED', 12.20, GETUTCDATE());
 
     -- 7045kHz_AdvWorks_WorkOrder_Routing (Target: ~38m)
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_WorkOrder_Routing', 'SUCCESS', 38.10, DATEADD(day, -1, GETUTCDATE()));
+    VALUES ('7045kHz_AdvWorks_WorkOrder_Routing', 'ENABLED', 38.10, DATEADD(day, -1, GETUTCDATE()));
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_WorkOrder_Routing', 'SUCCESS', 38.65, GETUTCDATE());
+    VALUES ('7045kHz_AdvWorks_WorkOrder_Routing', 'ENABLED', 38.65, GETUTCDATE());
 
     -- 7045kHz_AdvWorks_Sales_Marketing_Report (Target: ~42m)
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_Sales_Marketing_Report', 'SUCCESS', 41.80, DATEADD(day, -1, GETUTCDATE()));
+    VALUES ('7045kHz_AdvWorks_Sales_Marketing_Report', 'ENABLED', 41.80, DATEADD(day, -1, GETUTCDATE()));
     INSERT INTO [dbo].[AutoSysRuntimeJobs] (JobName, JobStatus, RunTimeInMinutes, InsertedAt)
-    VALUES ('7045kHz_AdvWorks_Sales_Marketing_Report', 'SUCCESS', 42.40, GETUTCDATE());
+    VALUES ('7045kHz_AdvWorks_Sales_Marketing_Report', 'ENABLED', 42.40, GETUTCDATE());

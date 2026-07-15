@@ -7,6 +7,12 @@ namespace AutoSysJilBlazor.Services;
 
 public class SqlDatabaseService
 {
+    static SqlDatabaseService()
+    {
+        // Map snake_case SQL columns (e.g. database_server) to C# PascalCase properties.
+        DefaultTypeMap.MatchNamesWithUnderscores = true;
+    }
+
     private readonly string _connectionString;
 
     public SqlDatabaseService(IConfiguration configuration)
@@ -191,10 +197,10 @@ public class SqlDatabaseService
             WHERE JobName = @OldJobName AND PackageName = @OldPackageName;
         ";
         await using var connection = new SqlConnection(_connectionString);
-        return await connection.ExecuteAsync(sql, new 
-        { 
-            JobName = entry.JobName, 
-            PackageName = entry.PackageName, 
+        return await connection.ExecuteAsync(sql, new
+        {
+            JobName = entry.JobName,
+            PackageName = entry.PackageName,
             ImportedAt = entry.ImportedAt,
             OldJobName = oldJobName,
             OldPackageName = oldPackageName
@@ -261,6 +267,33 @@ public class SqlDatabaseService
         return rows.ToList();
     }
 
+    public async Task<IReadOnlyList<DateTime>> GetPackageToObjectImportTimesAsync()
+    {
+        const string sql = @"
+            SELECT DISTINCT CAST(ImportedAt AS DATETIME2(0)) AS ImportedAt
+            FROM [TRAIN].[dbo].[AutoSysPackageToObject]
+            ORDER BY ImportedAt DESC;
+        ";
+
+        await using var connection = new SqlConnection(_connectionString);
+        var rows = await connection.QueryAsync<DateTime>(sql);
+        return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<DataConflictRow>> GetNumberOfPackagesTablesAreInAsync(DateTime importedAt)
+    {
+        var p = new DynamicParameters();
+        p.Add("@ImportedAt", importedAt);
+
+        await using var connection = new SqlConnection(_connectionString);
+        var rows = await connection.QueryAsync<DataConflictRow>(
+            "dbo.GetNumberOfPackagesTablesAreIn",
+            p,
+            commandType: System.Data.CommandType.StoredProcedure);
+
+        return rows.ToList();
+    }
+
     public async Task<int> InsertPackageToObjectAsync(AutoSysPackageToObject entry)
     {
         const string sql = @"
@@ -308,19 +341,19 @@ public class SqlDatabaseService
         await using var connection = new SqlConnection(_connectionString);
         return await connection.ExecuteAsync(sql, new
         {
-            PackageName      = entry.PackageName,
-            DatabaseServer   = entry.DatabaseServer,
-            Database         = entry.Database,
-            Schema           = entry.Schema,
-            ObjectName       = entry.ObjectName,
-            ObjectType       = entry.ObjectType,
-            ImportedAt       = entry.ImportedAt,
-            OldPackageName   = original.PackageName,
+            PackageName = entry.PackageName,
+            DatabaseServer = entry.DatabaseServer,
+            Database = entry.Database,
+            Schema = entry.Schema,
+            ObjectName = entry.ObjectName,
+            ObjectType = entry.ObjectType,
+            ImportedAt = entry.ImportedAt,
+            OldPackageName = original.PackageName,
             OldDatabaseServer = original.DatabaseServer,
-            OldDatabase      = original.Database,
-            OldSchema        = original.Schema,
-            OldObjectName    = original.ObjectName,
-            OldObjectType    = original.ObjectType
+            OldDatabase = original.Database,
+            OldSchema = original.Schema,
+            OldObjectName = original.ObjectName,
+            OldObjectType = original.ObjectType
         });
     }
 
@@ -339,12 +372,12 @@ public class SqlDatabaseService
         await using var connection = new SqlConnection(_connectionString);
         return await connection.ExecuteAsync(sql, new
         {
-            PackageName    = entry.PackageName,
+            PackageName = entry.PackageName,
             DatabaseServer = entry.DatabaseServer,
-            Database       = entry.Database,
-            Schema         = entry.Schema,
-            ObjectName     = entry.ObjectName,
-            ObjectType     = entry.ObjectType
+            Database = entry.Database,
+            Schema = entry.Schema,
+            ObjectName = entry.ObjectName,
+            ObjectType = entry.ObjectType
         });
     }
 
