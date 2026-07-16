@@ -92,5 +92,6 @@ Copy the publish output to the target machine and run the generated executable.
 
 ## Related docs
 
+- SQL Preparation : [`SQL/Prep_Tables.sql`](./SQL/Prep_Tables.sql)
 - DTSX loader details: [`DTSXDataLoader/README.md`](./DTSXDataLoader/README.md)
 - DTSX SQL examples: [`DTSXDataLoader/SQL_Examples.md`](./DTSXDataLoader/SQL_Examples.md)

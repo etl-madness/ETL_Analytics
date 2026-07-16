@@ -44,7 +44,14 @@ Not all options enabled.
 ```
 ## Initial DB and App settings configuration
 
-To change the default location of SSIS packages, Database Connection, and Dtsx tables, update the appsettings.json file.
+To change the default location of SSIS packages and DTSX table names, update `appsettings.json`.
+
+Database connectivity is now provided via environment variable (same pattern as AutoSysJilBlazor):
+
+```powershell
+$env:DB_CONNECTION_STRING = "Data Source=DBSERVER;Initial Catalog=DB;Trusted_Connection=True;Encrypt=False"
+```
+
 ### Appsettings.json
 
 ```json
@@ -52,9 +59,6 @@ To change the default location of SSIS packages, Database Connection, and Dtsx t
 {
   "Settings": {
     "DefaultPackageFile": "C:\\SSIS\\PACKAGE_DIR\\"
-  },
-  "ConnectionStrings": {
-    "DefaultConnection": "Data Source=DBSERVER;Initial Catalog=DB;Trusted_Connection=True;Encrypt=False"
   },
   "ApplicationTables": {
     "DtsxAttributes": "ETL.DTSX_Attributes",

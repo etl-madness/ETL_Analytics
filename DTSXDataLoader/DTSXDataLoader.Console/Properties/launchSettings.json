@@ -3,6 +3,9 @@
     "DataReader": {
       "commandName": "Project",
       "commandLineArgs": "-p Y:\\GitHub\\SSISDeploy\\ -s -t",
+      "environmentVariables": {
+        "DB_CONNECTION_STRING": "Server=.;Database=TRAIN;Trusted_Connection=True;Encrypt=False"
+      },
       "sqlDebugging": true
     }
   }
