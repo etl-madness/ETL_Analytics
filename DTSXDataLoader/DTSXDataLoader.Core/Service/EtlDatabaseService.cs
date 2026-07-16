@@ -55,7 +55,8 @@ public class EtlDatabaseService : IEtlDatabaseService
     {
         _configuration = configuration;
         _logger = logger;
-        _connectionString = _configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+        _connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
+            ?? throw new InvalidOperationException("Environment variable 'DB_CONNECTION_STRING' is not set.");
 
     }
     public async Task SaveLiteEtlToDb( List<DtsVariable> packageVariables, List<DtsMapper> mapper, bool truncate)
