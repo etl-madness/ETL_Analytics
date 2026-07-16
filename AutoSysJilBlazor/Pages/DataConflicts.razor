@@ -70,6 +70,10 @@
     </RadzenAlert>
 }
 
+@* ──────────────────────────────────────────────────────────────────────────────────────────────── *@
+@* Package/Object Conflicts Section *@
+@* ──────────────────────────────────────────────────────────────────────────────────────────────── *@
+
 @if (isLoading)
 {
     <div style="display: flex; justify-content: center; padding: 3rem 0;">
@@ -107,6 +111,77 @@ else if (rows is not null)
     </RadzenDataGrid>
 }
 
+@* ──────────────────────────────────────────────────────────────────────────────────────────────── *@
+@* Conflicting Jobs Section *@
+@* ──────────────────────────────────────────────────────────────────────────────────────────────── *@
+
+<RadzenText TextStyle="TextStyle.H5" Style="font-weight: 700; color: #0f172a; margin-top: 2rem; margin-bottom: 0.5rem;">
+    Current Conflicting Jobs
+</RadzenText>
+<RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #64748b; margin-bottom: 1rem;">
+    Jobs that access the same database objects with overlapping schedules.
+</RadzenText>
+
+<RadzenCard Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; background: #ffffff; margin-bottom: 1.25rem;">
+    <div style="display: flex; gap: 1rem; align-items: flex-end;">
+        <div>
+            <RadzenButton Text="Load Conflicting Jobs" Icon="warning" ButtonStyle="ButtonStyle.Warning"
+                          Click="@LoadConflictingJobsAsync" IsBusy="@isLoadingConflictingJobs" />
+        </div>
+    </div>
+</RadzenCard>
+
+@if (!string.IsNullOrWhiteSpace(conflictingJobsStatusMessage))
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Style="margin-bottom: 1rem;">
+        @conflictingJobsStatusMessage
+    </RadzenAlert>
+}
+
+@if (isLoadingConflictingJobs)
+{
+    <div style="display: flex; justify-content: center; padding: 3rem 0;">
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    </div>
+}
+else if (conflictingJobs is not null && conflictingJobs.Any())
+{
+    <RadzenDataGrid Data="@conflictingJobs" TItem="ConflictingJob" AllowFiltering="true" AllowSorting="true" AllowPaging="true"
+                    PageSize="15" AllowColumnResize="true" Style="border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 2rem;">
+        <Columns>
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="JobName" Title="Job Name" Width="200px" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="PackageName" Title="Package" Width="180px" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="DayName" Title="Day" Width="100px" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="StartTime" Title="Start Time" Width="120px">
+                <Template Context="item">@item.StartTime.ToString(@"hh\:mm")</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="EndTime" Title="End Time" Width="120px">
+                <Template Context="item">@item.EndTime.ToString(@"hh\:mm")</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="AvgRunTimeMinutes" Title="Avg Runtime (min)" Width="140px">
+                <Template Context="item">@(item.AvgRunTimeMinutes?.ToString("0.##") ?? "N/A")</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="DatabaseServer" Title="DB Server" Width="160px" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="Database" Title="Database" Width="140px" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="Schema" Title="Schema" Width="120px" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="ObjectName" Title="Object" Width="200px" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="ObjectType" Title="Type" Width="120px" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="SharedPackageCount" Title="Shared Count" Width="130px">
+                <Template Context="item">
+                    @if (item.SharedPackageCount > 1)
+                    {
+                        <span style="color: #dc2626; font-weight: 700;">@item.SharedPackageCount</span>
+                    }
+                    else
+                    {
+                        <span>@item.SharedPackageCount</span>
+                    }
+                </Template>
+            </RadzenDataGridColumn>
+        </Columns>
+    </RadzenDataGrid>
+}
+
 @code {
     private IReadOnlyList<DateTime> importTimes = Array.Empty<DateTime>();
     private DateTime? selectedImportedAt;
@@ -115,6 +190,11 @@ else if (rows is not null)
     private bool isLoading;
     private string statusMessage = string.Empty;
     private bool showColumnPickerDialog = false;
+
+    // Conflicting Jobs fields
+    private IReadOnlyList<ConflictingJob>? conflictingJobs;
+    private bool isLoadingConflictingJobs;
+    private string conflictingJobsStatusMessage = string.Empty;
 
     private Dictionary<string, bool> columnVisibility = new()
     {
@@ -227,6 +307,27 @@ else if (rows is not null)
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private async Task LoadConflictingJobsAsync()
+    {
+        isLoadingConflictingJobs = true;
+        conflictingJobsStatusMessage = string.Empty;
+        conflictingJobs = null;
+
+        try
+        {
+            conflictingJobs = await SqlDatabaseService.GetCurrentConflictingJobsAsync();
+            conflictingJobsStatusMessage = $"Loaded {conflictingJobs.Count} conflicting job(s).";
+        }
+        catch (Exception ex)
+        {
+            conflictingJobsStatusMessage = $"Failed to load conflicting jobs: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingConflictingJobs = false;
         }
     }
 }

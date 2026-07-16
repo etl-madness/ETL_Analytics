@@ -520,3 +520,233 @@ BEGIN
     END CATCH
 END;
 GO
+CREATE PROCEDURE DBO.GetCurrentConflictingJobs 
+AS
+BEGIN
+    BEGIN TRY
+        DECLARE @LatestJobToPackage Datetime
+        DECLARE @LatestJilJobs Datetime
+        DECLARE @LatestPackageToObject Datetime
+        DECLARE @LatestRunTimeJobs Datetime
+
+        SELECT @LatestJobToPackage=MAX(FORMAT(ImportedAt,'yyyy-MM-dd HH:mm:ss')) from [dbo].[AutoSysJobToPackage] (NOLOCK)
+        SELECT @LatestJilJobs=MAX(FORMAT(ImportedAt,'yyyy-MM-dd HH:mm:ss')) from  [dbo].[AutoSysJilJobs] (NOLOCK)
+        SELECT @LatestPackageToObject=MAX(ImportedAt) from  [dbo].[AutoSysPackageToObject](NOLOCK)
+
+        -- select @LatestJilJobs, @LatestJobToPackage
+        ;WITH Days AS
+        (
+            SELECT *
+            FROM (VALUES
+                ('mon',0),
+                ('tue',1),
+                ('wed',2),
+                ('thu',3),
+                ('fri',4),
+                ('sat',5),
+                ('sun',6)
+            ) d(DayName, DayOffset)
+        ),
+        Hours AS
+        (
+            SELECT Hr
+            FROM (VALUES
+                (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),
+                (12),(13),(14),(15),(16),(17),(18),(19),(20),(21),(22),(23)
+            ) h(Hr)
+        ),
+        JobDays AS
+        (
+            SELECT
+                j.JobName,
+                j.StartMins,
+                j.StartTimes,
+                LTRIM(RTRIM(s.value)) AS DayName,
+                j.ImportedAt
+            FROM dbo.AutoSysJilJobs j 
+            CROSS APPLY STRING_SPLIT
+            (
+                CASE
+                    WHEN LOWER(ISNULL(j.DaysOfWeek,'')) = 'all'
+                        THEN 'mon,tue,wed,thu,fri,sat,sun'
+                    ELSE LOWER(j.DaysOfWeek)
+                END,
+                ','
+            ) s
+             where FORMAT(j.ImportedAt,'yyyy-MM-dd HH:mm:ss')= @LatestJilJobs
+
+        ),
+        Runs AS
+        (
+            ---------------------------------------------------------
+            -- Hourly schedules (StartMins)
+            ---------------------------------------------------------
+            SELECT
+                jd.JobName,
+                jd.DayName,
+                CAST
+                (
+                    CONCAT
+                    (
+                        RIGHT('00' + CAST(h.Hr AS varchar(2)),2),
+                        ':',
+                        RIGHT('00' + jd.StartMins,2)
+                    ) AS time
+                ) AS StartTime
+        
+            FROM JobDays jd
+            CROSS JOIN Hours h
+            WHERE NULLIF(LTRIM(RTRIM(jd.StartMins)), '') IS NOT NULL
+
+            UNION ALL
+
+            ---------------------------------------------------------
+            -- Explicit StartTimes schedules
+            ---------------------------------------------------------
+            SELECT
+                jd.JobName,
+                jd.DayName,
+                CAST(LTRIM(RTRIM(s.value)) AS time) AS StartTime
+            FROM JobDays jd
+            CROSS APPLY STRING_SPLIT(jd.StartTimes, ',') s
+            WHERE NULLIF(LTRIM(RTRIM(jd.StartTimes)), '') IS NOT NULL
+        ),
+        AvgRuntime AS
+        (
+            SELECT
+                JobName,
+                AVG(RunTimeInMinutes) AS AvgRunTimeMinutes
+            FROM dbo.AutoSysRuntimeJobs
+            GROUP BY JobName
+        ),
+        Packages as (
+        SELECT  [JobName]
+              ,[PackageName]
+              ,[ImportedAt] = FORMAT(ImportedAt,'yyyy-MM-dd HH:mm:ss')
+          FROM [TRAIN].[dbo].[AutoSysJobToPackage]
+          WHERE   FORMAT(ImportedAt,'yyyy-MM-dd HH:mm:ss')= @LatestJobToPackage
+        ),
+        Combined AS (
+        SELECT Runs.JobName,
+            Runs.DayName,
+            Runs.StartTime,
+            [EndTime] = DATEADD(MINUTE,AvgRuntime.AvgRunTimeMinutes, Runs.StartTime),
+            Packages.PackageName,
+            AvgRuntime.AvgRunTimeMinutes 
+        FROM Runs
+        left join Packages on Packages.JobName=Runs.JobName
+        left join AvgRuntime on Runs.JobName=AvgRuntime.JobName
+        ) ,
+        MappedDataObjects AS (
+            SELECT    [PackageName]
+              ,[database_server]
+              ,[database]
+              ,[schema]
+              ,[object_name]
+              ,[object_type]
+              ,[ImportedAt]
+          FROM [TRAIN].[dbo].[AutoSysPackageToObject]
+  
+        ),
+        ObjectPackageCounts AS
+        (
+            SELECT
+                m.[database_server],
+                m.[database],
+                m.[schema],
+                m.[object_name],
+                m.[object_type],
+                COUNT(DISTINCT m.[PackageName]) AS SharedPackageCount
+            FROM MappedDataObjects m
+            GROUP BY
+                m.[database_server],
+                m.[database],
+                m.[schema],
+                m.[object_name],
+                m.[object_type]
+            --HAVING COUNT(DISTINCT m.[PackageName]) > 1
+        ) ,
+        PackageObjectRelationship AS (SELECT
+            c.[JobName],
+            c.[DayName],
+            c.[StartTime],
+            c.[EndTime],
+            c.[PackageName],
+            c.[AvgRunTimeMinutes],
+            m.[database_server],
+            m.[database],
+            m.[schema],
+            m.[object_name],
+            m.[object_type],
+            opc.[SharedPackageCount]
+        FROM Combined c
+        LEFT JOIN MappedDataObjects m
+            ON m.[PackageName] = c.[PackageName]
+        INNER JOIN ObjectPackageCounts opc
+            ON ISNULL(opc.[database_server], '') = ISNULL(m.[database_server], '')
+           AND ISNULL(opc.[database], '') = ISNULL(m.[database], '')
+           AND ISNULL(opc.[schema], '') = ISNULL(m.[schema], '')
+           AND ISNULL(opc.[object_name], '') = ISNULL(m.[object_name], '')
+           AND ISNULL(opc.[object_type], '') = ISNULL(m.[object_type], '')
+ 
+            ) 
+             SELECT DISTINCT
+            p1.[JobName],
+            p1.[DayName],
+            p1.[StartTime],
+            p1.[EndTime],
+            p1.[PackageName],
+            p1.[AvgRunTimeMinutes],
+            p1.[database_server],
+            p1.[database],
+            p1.[schema],
+            p1.[object_name],
+            p1.[object_type],
+            p1.[SharedPackageCount]
+        FROM PackageObjectRelationship p1
+        WHERE EXISTS
+        (
+            SELECT 1
+            FROM PackageObjectRelationship p2
+            WHERE p2.[PackageName] <> p1.[PackageName]
+              AND p2.[DayName] = p1.[DayName]
+              AND ISNULL(p2.[database_server], '') = ISNULL(p1.[database_server], '')
+              AND ISNULL(p2.[database], '') = ISNULL(p1.[database], '')
+              AND ISNULL(p2.[schema], '') = ISNULL(p1.[schema], '')
+              AND ISNULL(p2.[object_name], '') = ISNULL(p1.[object_name], '')
+              AND ISNULL(p2.[object_type], '') = ISNULL(p1.[object_type], '')
+              AND (
+                    p1.[StartTime] = p2.[StartTime]
+                    OR p1.[EndTime] BETWEEN p2.StartTime AND  p2.[EndTime]
+                  )
+        )
+        ORDER BY
+        p1.[DayName],
+        p1.[StartTime],
+
+            p1.[database_server],
+            p1.[database],
+            p1.[schema],
+            p1.[object_name],
+            p1.[object_type],
+    
+    
+            p1.[PackageName],
+            p1.[JobName];
+     END TRY
+    BEGIN CATCH
+        -- Return error context and rethrow to preserve original error semantics
+        SELECT
+            ERROR_NUMBER()   AS ErrorNumber,
+            ERROR_SEVERITY() AS ErrorSeverity,
+            ERROR_STATE()    AS ErrorState,
+            ERROR_PROCEDURE()AS ErrorProcedure,
+            ERROR_LINE()     AS ErrorLine,
+            ERROR_MESSAGE()  AS ErrorMessage;
+
+        THROW; -- re-throw the original error
+    END CATCH
+ END;
+ GO
+ 
+ 

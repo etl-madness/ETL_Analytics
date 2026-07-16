@@ -220,6 +220,18 @@
         }
     </div>
 
+    <div class="stat-card">
+        <div class="stat-icon" style="background: #fee2e2;">
+            <span class="rzi" style="color: #dc2626;">warning</span>
+        </div>
+        <div style="font-size: 1.8rem; font-weight: 800; color: #0f172a; line-height: 1;">@currentConflictCount.ToString("N0")</div>
+        <div style="color: #64748b; font-size: 0.85rem; margin-top: 0.35rem; font-weight: 500;">Current Conflicts</div>
+        @if (currentConflictCount > 0)
+        {
+            <div class="chip" style="margin-top: 0.6rem; background: #fee2e2; color: #b91c1c;">attention</div>
+        }
+    </div>
+
 </div>
 
 <!-- ── Feature Cards + Pipeline ── -->
@@ -335,6 +347,7 @@
     private int jobToPackageCount;
     private int packageToObjectCount;
     private int scheduledJobCount;
+    private int currentConflictCount;
     private bool isDbOnline;
     private string dbError = string.Empty;
 
@@ -370,6 +383,16 @@
 
             var p2o = await SqlDatabaseService.GetPackageToObjectsAsync();
             packageToObjectCount = p2o.Count;
+
+            try
+            {
+                var conflicts = await SqlDatabaseService.GetCurrentConflictingJobsAsync();
+                currentConflictCount = conflicts.Count;
+            }
+            catch
+            {
+                currentConflictCount = 0;
+            }
 
             isDbOnline = true;
         }

@@ -497,6 +497,17 @@ public class SqlDatabaseService
             commandType: System.Data.CommandType.StoredProcedure);
         return rows.ToList();
     }
+
+    // ─── Conflicting Jobs ─────────────────────────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<ConflictingJob>> GetCurrentConflictingJobsAsync()
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        var rows = await connection.QueryAsync<ConflictingJob>(
+            "dbo.GetCurrentConflictingJobs",
+            commandType: System.Data.CommandType.StoredProcedure);
+        return rows.ToList();
+    }
 }
 
 
