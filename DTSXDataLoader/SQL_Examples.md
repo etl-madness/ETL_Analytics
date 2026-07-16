@@ -31,8 +31,8 @@ SELECT   m.[Id]
       ,m.[Name]
       ,m.[ComponentType]
       ,m.[LoadDate]
-  FROM [PROTO].[ETL].[DTSX_Mapper] m
-  LEFT JOIN [PROTO].[ETL].[DTSX_Variables] v on v.Package=m.Package and CONCAT(v.[VariableNameSpace],'::',v.[VariableName]) = m.SqlStatement
+  FROM [dbo].[DTSX_Mapper] m
+  LEFT JOIN [dbo].[DTSX_Variables] v on v.Package=m.Package and CONCAT(v.[VariableNameSpace],'::',v.[VariableName]) = m.SqlStatement
 
 /*
 
@@ -53,8 +53,8 @@ Show all attributes associated with a Package's Connections
       ,a.[AttributeType]
       ,a.[AttributeValue]
       ,a.[LoadDate]
-  FROM [PROTO].[ETL].[DTSX_Attributes] a
-  LEFT JOIN [PROTO].[ETL].[DTSX_Elements] e on e.Package=a.Package and a.ParentUniqueId=e.UniqueId and e.ParentNodeName=a.ParentNodeName
+  FROM [dbo].[DTSX_Attributes] a
+  LEFT JOIN [dbo].[DTSX_Elements] e on e.Package=a.Package and a.ParentUniqueId=e.UniqueId and e.ParentNodeName=a.ParentNodeName
   
   WHERE a.Package='tablevVarNameDepartment.dtsx'  and e.ParentNodeName='DTS:ConnectionManagers'
     

@@ -77,7 +77,7 @@ Changing Names and Scheme is allowed, however you will need to update the appset
 
 ```sql
 
-CREATE TABLE [ETL].[DTSX_Attributes](
+CREATE TABLE [dbo].[DTSX_Attributes](
 	[Id] [int] IDENTITY(1,1) NOT NULL PRIMARY KEY,
 	[CreationName] [nvarchar](max) NULL,
 	[Description] [nvarchar](max) NULL,
@@ -100,7 +100,7 @@ CREATE TABLE [ETL].[DTSX_Attributes](
 
  
 
-CREATE TABLE [ETL].[DTSX_Elements](
+CREATE TABLE [dbo].[DTSX_Elements](
 	[Id] [int] IDENTITY(1,1) NOT NULL PRIMARY KEY,
 	[CreationName] [nvarchar](max) NULL,
 	[Description] [nvarchar](max) NULL,
@@ -124,7 +124,7 @@ CREATE TABLE [ETL].[DTSX_Elements](
 
  
 
-CREATE TABLE [ETL].[DTSX_Mapper](
+CREATE TABLE [dbo].[DTSX_Mapper](
 	[Id] [int] IDENTITY(1,1) NOT NULL PRIMARY KEY,
 	[Description] [nvarchar](max) NULL,
 	[Package] [nvarchar](max) NULL,
@@ -141,7 +141,7 @@ CREATE TABLE [ETL].[DTSX_Mapper](
 );
  
 
-CREATE TABLE [ETL].[DTSX_Variables](
+CREATE TABLE [dbo].[DTSX_Variables](
 	[Id] [int] IDENTITY(1,1) NOT NULL PRIMARY KEY,
 	[CreationName] [nvarchar](max) NULL,
 	[Description] [nvarchar](max) NULL,
@@ -166,4 +166,32 @@ CREATE TABLE [ETL].[DTSX_Variables](
 	[LoadDate] [datetime] NOT NULL DEFAULT CURRENT_TIMESTAMP,
 );
 
+CREATE VIEW DTSX_SQL_View
+AS
+BEGIN
+SELECT   m.[Id]
+      ,m.[Description]
+      ,m.[Package]
+      ,m.[RefId]
+	  ,'Pipeline' =   CASE
+		  WHEN SUBSTRING(m.[RefId], 1, LEN(m.[RefId]) - CHARINDEX('\', REVERSE(m.[RefId]))) = 'Package' THEN m.[RefId]
+		  ELSE SUBSTRING(m.[RefId], 1, LEN(m.[RefId]) - CHARINDEX('\', REVERSE(m.[RefId]))) 
+		  END
+
+      ,'SQL Source' = m.[SqlStatement]
+	  ,'Resolved SQL' = CASE 
+		  WHEN v.VariableValue  IS NULL THEN m.SqlStatement
+		  ELSE v.VariableValue
+		  END
+      ,m.[ConnectionString]
+      ,m.[ConnectionName]
+      ,m.[ConnectionDtsId]
+      ,m.[ConnectionType]
+      ,m.[ConnectionRefId]
+      ,m.[Name]
+      ,m.[ComponentType]
+      ,m.[LoadDate]
+  FROM [dbo].[DTSX_Mapper] m
+  LEFT JOIN [dbo].[DTSX_Variables] v on v.Package=m.Package and CONCAT(v.[VariableNameSpace],'::',v.[VariableName]) = m.SqlStatement
+  END
 ```
