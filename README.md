@@ -59,7 +59,7 @@ Key delivered capabilities include JIL snapshot management, schedule conflict vi
 ![DTSX Loader Settings](./images/DTSX_Loader_Settings.png)
 
 ### DTSX SQL View
-![DTSX SQL View](.\imagesDTSX_SQL_View.png)
+![DTSX SQL View](./images/DTSX_SQL_View.png)
 
 ## Prerequisites
 
