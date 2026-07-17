@@ -1100,3 +1100,34 @@ SELECT   m.[Id]
   LEFT JOIN [dbo].[DTSX_Variables] v on v.Package=m.Package and CONCAT(v.[VariableNameSpace],'::',v.[VariableName]) = m.SqlStatement
 GO
 
+-- Main table for business rules
+IF OBJECT_ID('dbo.BusinessRules', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.BusinessRules (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        Name NVARCHAR(255) NOT NULL,
+        Description NVARCHAR(MAX) NULL,
+        RuleType NVARCHAR(50) NOT NULL, -- TSQL, CSharp
+        Code NVARCHAR(MAX) NOT NULL,
+        Version INT NOT NULL DEFAULT 1,
+        IsActive BIT NOT NULL DEFAULT 1,
+        CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+    );
+END;
+-- History table for versioning
+IF OBJECT_ID('dbo.BusinessRuleHistory', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.BusinessRuleHistory (
+        HistoryId INT IDENTITY(1,1) PRIMARY KEY,
+        RuleId INT NOT NULL,
+        Name NVARCHAR(255) NOT NULL,
+        Description NVARCHAR(MAX) NULL,
+        RuleType NVARCHAR(50) NOT NULL,
+        Code NVARCHAR(MAX) NOT NULL,
+        Version INT NOT NULL,
+        ArchivedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_BusinessRuleHistory_RuleId FOREIGN KEY (RuleId) REFERENCES dbo.BusinessRules(Id)
+    );
+END;
+GO
