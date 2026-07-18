@@ -17,6 +17,8 @@ From a business perspective, the platform helps teams:
 
 Key delivered capabilities include JIL snapshot management, schedule conflict visualization, data conflict analysis, in-app DTSX loader execution, and SQL lineage inspection through `dbo.DTSX_SQL_View`.
 
+The application also includes a Business Rules subsystem with rule authoring, versioning, and bundle-based execution for operational validations and ETL governance workflows.
+
 ## What this solution provides
 
 - AutoSys JIL import and persistence by `ImportedAt` snapshot
@@ -25,6 +27,8 @@ Key delivered capabilities include JIL snapshot management, schedule conflict vi
 - Data conflicts dashboard for package/object overlap analysis
 - In-app `DTSXDataLoader` settings + execution with live log output
 - DTSX SQL inspection grid over `dbo.DTSX_SQL_View` with filtering, column selection, and CSV export
+- Business Rules IDE for authoring and running T-SQL/C# rules
+- Business Rule Bundles for ordered multi-step execution with result piping
 
 ## Main pages
 
@@ -37,6 +41,8 @@ Key delivered capabilities include JIL snapshot management, schedule conflict vi
 | Data Conflicts | `/data-conflicts` | Conflict and conflicting-job analysis |
 | DTSX Loader Settings | `/dtsx-loader-settings` | Configure and execute `DTSXDataLoader` |
 | DTSX SQL View | `/dtsx-sql-view` | Query results from `dbo.DTSX_SQL_View` |
+| Business Rules | `/business-rules` | Create, version, and execute T-SQL/C# rules |
+| Rule Bundles | `/business-rule-bundles` | Build and run ordered rule sequences |
 
 ## Screenshots
 
@@ -60,6 +66,15 @@ Key delivered capabilities include JIL snapshot management, schedule conflict vi
 
 ### DTSX SQL View
 ![DTSX SQL View](./images/DTSX_SQL_View.png)
+
+### Business Rules - C# Script
+![Business Rules - C# Script](./images/Business_Rule_CSHARP.png)
+
+### Business Rules - SQL Script
+![Business Rules - SQL Script](./images/Business_Rule_SQL.png)
+
+### Business Rules Bundle - Combined Execution
+![Business Rules Bundle - Combined Execution](./images/Business_Rule_Bundle_Combined.png)
 
 ## Prerequisites
 
@@ -95,3 +110,5 @@ Copy the publish output to the target machine and run the generated executable.
 - SQL Preparation : [`SQL/Prep_Tables.sql`](./SQL/Prep_Tables.sql)
 - DTSX loader details: [`DTSXDataLoader/README.md`](./DTSXDataLoader/README.md)
 - DTSX SQL examples: [`DTSXDataLoader/SQL_Examples.md`](./DTSXDataLoader/SQL_Examples.md)
+- Business rules reference: [`BUSINESS_RULES.md`](./BUSINESS_RULES.md)
+- Architecture overview: [`ArchitectureOverview.md`](./ArchitectureOverview.md)
