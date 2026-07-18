@@ -24,8 +24,9 @@ public static class JilParser
                 .Where(l => !string.IsNullOrWhiteSpace(l))
                 .ToList();
 
-            foreach (var line in lines)
+            for (var i = 0; i < lines.Count; i++)
             {
+                var line = lines[i];
                 if (!line.Contains(':'))
                 {
                     continue;
@@ -33,7 +34,33 @@ public static class JilParser
 
                 var parts = line.Split(new[] { ':' }, 2);
                 var key = parts[0].Trim();
-                var value = parts[1].Trim().Trim('"');
+                var value = parts[1].Trim();
+
+                if (value.StartsWith('"') && !value.EndsWith('"'))
+                {
+                    value = value[1..];
+
+                    while (i + 1 < lines.Count)
+                    {
+                        i++;
+                        var continuationLine = lines[i];
+
+                        if (continuationLine.EndsWith('"'))
+                        {
+                            value += "\r\n" + continuationLine[..^1];
+                            break;
+                        }
+
+                        value += "\r\n" + continuationLine;
+                    }
+                }
+                else
+                {
+                    if (value.Length >= 2 && value.StartsWith('"') && value.EndsWith('"'))
+                    {
+                        value = value[1..^1];
+                    }
+                }
 
                 switch (key.ToLowerInvariant())
                 {
