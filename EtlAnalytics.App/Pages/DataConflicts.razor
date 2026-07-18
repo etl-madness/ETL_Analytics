@@ -1,0 +1,417 @@
+@page "/data-conflicts"
+@page "/dataconflicts"
+@using EtlAnalytics.App.Models
+@using EtlAnalytics.App.Services
+@inject SqlDatabaseService SqlDatabaseService
+
+<PageTitle>Data Conflicts</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4" Style="font-weight: 700; color: #0f172a; margin-bottom: 0.25rem;">Data Conflicts
+</RadzenText>
+<RadzenText TextStyle="TextStyle.Subtitle1" Style="color: #64748b; margin-bottom: 1.5rem;">
+    View package/object conflicts from dbo.GetNumberOfPackagesTablesAreIn by ImportedAt snapshot.
+</RadzenText>
+
+<RadzenCard
+    Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; background: #ffffff; margin-bottom: 1.25rem;">
+    <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+        <div>
+            <RadzenText TextStyle="TextStyle.Subtitle2"
+                        Style="color: #475569; font-weight: 600; margin-bottom: 0.4rem; display:block;">Imported At</RadzenText>
+            <RadzenDropDown TValue="DateTime?" Data="@importTimes" @bind-Value="selectedImportedAt"
+                            Style="min-width: 260px;" Placeholder="Select import snapshot">
+                <Template Context="value">
+                    @(((DateTime)value).ToString("yyyy-MM-dd HH:mm:ss"))
+                </Template>
+            </RadzenDropDown>
+        </div>
+        <div>
+            <RadzenButton Text="Load Conflicts" Icon="search" ButtonStyle="ButtonStyle.Primary"
+                          Click="@LoadConflictsAsync" IsBusy="@isLoading" Disabled="@(selectedImportedAt is null)" />
+        </div>
+        <div style="display:flex; align-items:center; gap:0.5rem; margin-left:auto;">
+            <RadzenText TextStyle="TextStyle.Body2" Style="color: #475569;">Show conflicts only</RadzenText>
+            <RadzenSwitch @bind-Value="showConflictsOnly" />
+        </div>
+        <div>
+            <RadzenSplitButton Icon="visibility" Text="Columns" Click="@OnColumnButtonClick" ButtonStyle="ButtonStyle.Light">
+                <ChildContent>
+                    <RadzenSplitButtonItem Text="Show All" Value="show-all" />
+                    <RadzenSplitButtonItem Text="Hide All" Value="hide-all" />
+                </ChildContent>
+            </RadzenSplitButton>
+        </div>
+    </div>
+</RadzenCard>
+
+@if (showColumnPickerDialog)
+{
+    <RadzenCard Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; background: #ffffff; margin-bottom: 1rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+            <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600;">Select Columns to Display</RadzenText>
+            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => showColumnPickerDialog = false)" />
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem;">
+            @foreach (var column in columnVisibility)
+            {
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <RadzenCheckBox @bind-Value="columnVisibility[column.Key]" Name="@column.Key" />
+                    <RadzenLabel Text="@column.Key" Component="@column.Key" Style="margin: 0; cursor: pointer;" />
+                </div>
+            }
+        </div>
+    </RadzenCard>
+}
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Style="margin-bottom: 1rem;">
+        @statusMessage
+    </RadzenAlert>
+}
+
+@* ──────────────────────────────────────────────────────────────────────────────────────────────── *@
+@* Package/Object Conflicts Section *@
+@* ──────────────────────────────────────────────────────────────────────────────────────────────── *@
+
+@if (isLoading)
+{
+    <div style="display: flex; justify-content: center; padding: 3rem 0;">
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    </div>
+}
+else if (rows is not null)
+{
+    <RadzenDataGrid Data="@displayRows" TItem="DataConflictRow" AllowFiltering="true" AllowSorting="true" AllowPaging="true"
+                    PageSize="15" AllowColumnResize="true" Style="border: 1px solid #e2e8f0; border-radius: 8px;">
+        <Columns>
+            <RadzenDataGridColumn TItem="DataConflictRow" Property="PackageName" Title="Package" Width="220px" Visible="@columnVisibility["Package"]" />
+            <RadzenDataGridColumn TItem="DataConflictRow" Property="DatabaseServer" Title="DB Server" Width="160px" Visible="@columnVisibility["DB Server"]" />
+            <RadzenDataGridColumn TItem="DataConflictRow" Property="Database" Title="Database" Width="140px" Visible="@columnVisibility["Database"]" />
+            <RadzenDataGridColumn TItem="DataConflictRow" Property="Schema" Title="Schema" Width="120px" Visible="@columnVisibility["Schema"]" />
+            <RadzenDataGridColumn TItem="DataConflictRow" Property="ObjectName" Title="Object" Width="240px" Visible="@columnVisibility["Object"]" />
+            <RadzenDataGridColumn TItem="DataConflictRow" Property="ObjectType" Title="Type" Width="120px" Visible="@columnVisibility["Type"]" />
+            <RadzenDataGridColumn TItem="DataConflictRow" Property="ImportedAt" Title="Imported At" Width="180px" Visible="@columnVisibility["Imported At"]">
+                <Template Context="item">@item.ImportedAt.ToString("yyyy-MM-dd HH:mm:ss")</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="DataConflictRow" Property="ExistsInPackageCount" Title="# Packages" Width="120px" Visible="@columnVisibility["# Packages"]" />
+            <RadzenDataGridColumn TItem="DataConflictRow" Property="IsInMultiplePackages" Title="Conflict" Width="110px" Visible="@columnVisibility["Conflict"]">
+                <Template Context="item">
+                    @if (item.IsInMultiplePackages == 1)
+                    {
+                        <span style="color: #b91c1c; font-weight: 700;">Yes</span>
+                    }
+                    else
+                    {
+                        <span style="color: #166534; font-weight: 600;">No</span>
+                    }
+                </Template>
+            </RadzenDataGridColumn>
+        </Columns>
+    </RadzenDataGrid>
+}
+
+@* ──────────────────────────────────────────────────────────────────────────────────────────────── *@
+@* Conflicting Jobs Section *@
+@* ──────────────────────────────────────────────────────────────────────────────────────────────── *@
+
+<RadzenText TextStyle="TextStyle.H5" Style="font-weight: 700; color: #0f172a; margin-top: 2rem; margin-bottom: 0.5rem;">
+    Current Conflicting Jobs
+</RadzenText>
+<RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #64748b; margin-bottom: 1rem;">
+    Jobs that access the same database objects with overlapping schedules.
+</RadzenText>
+
+<RadzenCard Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; background: #ffffff; margin-bottom: 1.25rem;">
+    <div style="display: flex; gap: 1rem; align-items: flex-end;">
+        <div>
+            <RadzenButton Text="Load Conflicting Jobs" Icon="warning" ButtonStyle="ButtonStyle.Warning"
+                          Click="@LoadConflictingJobsAsync" IsBusy="@isLoadingConflictingJobs" />
+        </div>
+        <div>
+            <RadzenSplitButton Icon="visibility" Text="Columns" Click="@OnConflictingJobsColumnButtonClick" ButtonStyle="ButtonStyle.Light">
+                <ChildContent>
+                    <RadzenSplitButtonItem Text="Show All" Value="show-all" />
+                    <RadzenSplitButtonItem Text="Hide All" Value="hide-all" />
+                </ChildContent>
+            </RadzenSplitButton>
+        </div>
+    </div>
+</RadzenCard>
+
+@if (showConflictingJobsColumnPickerDialog)
+{
+    <RadzenCard Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; background: #ffffff; margin-bottom: 1rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+            <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600;">Select Current Conflicting Jobs Columns</RadzenText>
+            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => showConflictingJobsColumnPickerDialog = false)" />
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem;">
+            @foreach (var column in conflictingJobsColumnVisibility)
+            {
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <RadzenCheckBox @bind-Value="conflictingJobsColumnVisibility[column.Key]" Name="@column.Key" />
+                    <RadzenLabel Text="@column.Key" Component="@column.Key" Style="margin: 0; cursor: pointer;" />
+                </div>
+            }
+        </div>
+    </RadzenCard>
+}
+
+@if (!string.IsNullOrWhiteSpace(conflictingJobsStatusMessage))
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Style="margin-bottom: 1rem;">
+        @conflictingJobsStatusMessage
+    </RadzenAlert>
+}
+
+@if (isLoadingConflictingJobs)
+{
+    <div style="display: flex; justify-content: center; padding: 3rem 0;">
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    </div>
+}
+else if (conflictingJobs is not null && conflictingJobs.Any())
+{
+    <RadzenDataGrid Data="@conflictingJobs" TItem="ConflictingJob" AllowFiltering="true" AllowSorting="true" AllowPaging="true"
+                    PageSize="15" AllowColumnResize="true" Style="border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 2rem;">
+        <Columns>
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="JobName" Title="Job Name" Width="200px" Visible="@conflictingJobsColumnVisibility["Job Name"]" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="PackageName" Title="Package" Width="180px" Visible="@conflictingJobsColumnVisibility["Package"]" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="DayName" Title="Day" Width="100px" Visible="@conflictingJobsColumnVisibility["Day"]" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="StartTime" Title="Start Time" Width="120px" Visible="@conflictingJobsColumnVisibility["Start Time"]">
+                <Template Context="item">@item.StartTime.ToString(@"hh\:mm")</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="EndTime" Title="End Time" Width="120px" Visible="@conflictingJobsColumnVisibility["End Time"]">
+                <Template Context="item">@item.EndTime.ToString(@"hh\:mm")</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="AvgRunTimeMinutes" Title="Avg Runtime (min)" Width="140px" Visible="@conflictingJobsColumnVisibility["Avg Runtime (min)"]">
+                <Template Context="item">@(item.AvgRunTimeMinutes?.ToString("0.##") ?? "N/A")</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="DatabaseServer" Title="DB Server" Width="160px" Visible="@conflictingJobsColumnVisibility["DB Server"]" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="Database" Title="Database" Width="140px" Visible="@conflictingJobsColumnVisibility["Database"]" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="Schema" Title="Schema" Width="120px" Visible="@conflictingJobsColumnVisibility["Schema"]" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="ObjectName" Title="Object" Width="200px" Visible="@conflictingJobsColumnVisibility["Object"]" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="ObjectType" Title="Type" Width="120px" Visible="@conflictingJobsColumnVisibility["Type"]" />
+            <RadzenDataGridColumn TItem="ConflictingJob" Property="SharedPackageCount" Title="Shared Count" Width="130px" Visible="@conflictingJobsColumnVisibility["Shared Count"]">
+                <Template Context="item">
+                    @if (item.SharedPackageCount > 1)
+                    {
+                        <span style="color: #dc2626; font-weight: 700;">@item.SharedPackageCount</span>
+                    }
+                    else
+                    {
+                        <span>@item.SharedPackageCount</span>
+                    }
+                </Template>
+            </RadzenDataGridColumn>
+        </Columns>
+    </RadzenDataGrid>
+}
+
+@code {
+    private IReadOnlyList<DateTime> importTimes = Array.Empty<DateTime>();
+    private DateTime? selectedImportedAt;
+    private IReadOnlyList<DataConflictRow>? rows;
+    private bool showConflictsOnly = true;
+    private bool isLoading;
+    private string statusMessage = string.Empty;
+    private bool showColumnPickerDialog = false;
+
+    // Conflicting Jobs fields
+    private IReadOnlyList<ConflictingJob>? conflictingJobs;
+    private bool isLoadingConflictingJobs;
+    private string conflictingJobsStatusMessage = string.Empty;
+    private bool showConflictingJobsColumnPickerDialog = false;
+
+    private Dictionary<string, bool> columnVisibility = new()
+    {
+        ["Package"] = true,
+        ["DB Server"] = true,
+        ["Database"] = true,
+        ["Schema"] = true,
+        ["Object"] = true,
+        ["Type"] = true,
+        ["Imported At"] = true,
+        ["# Packages"] = true,
+        ["Conflict"] = true
+    };
+
+    private Dictionary<string, bool> conflictingJobsColumnVisibility = new()
+    {
+        ["Job Name"] = true,
+        ["Package"] = true,
+        ["Day"] = true,
+        ["Start Time"] = true,
+        ["End Time"] = true,
+        ["Avg Runtime (min)"] = true,
+        ["DB Server"] = true,
+        ["Database"] = true,
+        ["Schema"] = true,
+        ["Object"] = true,
+        ["Type"] = true,
+        ["Shared Count"] = true
+    };
+
+    private IReadOnlyList<DataConflictRow> displayRows =>
+        rows is null
+            ? Array.Empty<DataConflictRow>()
+            : (showConflictsOnly
+                ? rows.Where(r => r.IsInMultiplePackages >= 1).ToList()
+                : rows);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadImportTimesAsync();
+        if (selectedImportedAt.HasValue)
+        {
+            await LoadConflictsAsync();
+        }
+    }
+
+    private void ShowColumnPicker()
+    {
+        showColumnPickerDialog = !showColumnPickerDialog;
+    }
+
+    private void OnColumnButtonClick(RadzenSplitButtonItem item)
+    {
+        if (item?.Value is string value)
+        {
+            if (value == "show-all")
+            {
+                ShowAllColumns();
+            }
+            else if (value == "hide-all")
+            {
+                HideAllColumns();
+            }
+        }
+        else
+        {
+            ShowColumnPicker();
+        }
+    }
+
+    private void ShowAllColumns()
+    {
+        foreach (var key in columnVisibility.Keys.ToList())
+        {
+            columnVisibility[key] = true;
+        }
+    }
+
+    private void HideAllColumns()
+    {
+        foreach (var key in columnVisibility.Keys.ToList())
+        {
+            columnVisibility[key] = false;
+        }
+    }
+
+    private void ShowConflictingJobsColumnPicker()
+    {
+        showConflictingJobsColumnPickerDialog = !showConflictingJobsColumnPickerDialog;
+    }
+
+    private void OnConflictingJobsColumnButtonClick(RadzenSplitButtonItem item)
+    {
+        if (item?.Value is string value)
+        {
+            if (value == "show-all")
+            {
+                ShowAllConflictingJobsColumns();
+            }
+            else if (value == "hide-all")
+            {
+                HideAllConflictingJobsColumns();
+            }
+        }
+        else
+        {
+            ShowConflictingJobsColumnPicker();
+        }
+    }
+
+    private void ShowAllConflictingJobsColumns()
+    {
+        foreach (var key in conflictingJobsColumnVisibility.Keys.ToList())
+        {
+            conflictingJobsColumnVisibility[key] = true;
+        }
+    }
+
+    private void HideAllConflictingJobsColumns()
+    {
+        foreach (var key in conflictingJobsColumnVisibility.Keys.ToList())
+        {
+            conflictingJobsColumnVisibility[key] = false;
+        }
+    }
+
+    private async Task LoadImportTimesAsync()
+    {
+        try
+        {
+            importTimes = await SqlDatabaseService.GetPackageToObjectImportTimesAsync();
+            selectedImportedAt = importTimes.FirstOrDefault();
+
+            if (!importTimes.Any())
+            {
+                statusMessage = "No ImportedAt values were found in TRAIN.dbo.AutoSysPackageToObject.";
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Failed to load ImportedAt values: {ex.Message}";
+        }
+    }
+
+    private async Task LoadConflictsAsync()
+    {
+        if (!selectedImportedAt.HasValue)
+        {
+            statusMessage = "Select an ImportedAt value first.";
+            return;
+        }
+
+        isLoading = true;
+        statusMessage = string.Empty;
+        rows = null;
+
+        try
+        {
+            rows = await SqlDatabaseService.GetNumberOfPackagesTablesAreInAsync(selectedImportedAt.Value);
+            statusMessage = $"Loaded {rows.Count} row(s) for {selectedImportedAt.Value:yyyy-MM-dd HH:mm:ss}.";
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Failed to load conflicts: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadConflictingJobsAsync()
+    {
+        isLoadingConflictingJobs = true;
+        conflictingJobsStatusMessage = string.Empty;
+        conflictingJobs = null;
+
+        try
+        {
+            conflictingJobs = await SqlDatabaseService.GetCurrentConflictingJobsAsync();
+            conflictingJobsStatusMessage = $"Loaded {conflictingJobs.Count} conflicting job(s).";
+        }
+        catch (Exception ex)
+        {
+            conflictingJobsStatusMessage = $"Failed to load conflicting jobs: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingConflictingJobs = false;
+        }
+    }
+}

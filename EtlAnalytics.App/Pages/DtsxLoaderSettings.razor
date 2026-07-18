@@ -1,0 +1,221 @@
+@page "/dtsx-loader-settings"
+@using EtlAnalytics.App.Models
+@using EtlAnalytics.App.Services
+@using DtsxLoaderSettingsModel = EtlAnalytics.App.Models.DtsxLoaderSettings
+@inject DtsxLoaderSettingsService SettingsService
+@inject DtsxLoaderExecutionService ExecutionService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<PageTitle>DTSX Loader Settings</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4" Style="font-weight: 700; color: #0f172a; margin-bottom: 0.25rem;">DTSX Loader Settings</RadzenText>
+<RadzenText TextStyle="TextStyle.Subtitle1" Style="color: #64748b; margin-bottom: 1.5rem;">
+    Settings mirror the options from DTSXDataLoader.Console (Options.cs) so this app can trigger that loader with consistent arguments.
+</RadzenText>
+
+<RadzenCard Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; background: #ffffff; margin-bottom: 1.25rem;">
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.35rem; display:block;">Package Path (-p, --path)</RadzenText>
+            <RadzenTextBox @bind-Value="settings.Path" Placeholder="Path to package file or directory" Style="width: 100%;" />
+        </RadzenColumn>
+
+        <RadzenColumn Size="12" SizeMD="3">
+            <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.35rem; display:block;">Extension (-x, --extension)</RadzenText>
+            <RadzenTextBox @bind-Value="settings.Extension" Placeholder="e.g. xml" Style="width: 100%;" />
+        </RadzenColumn>
+
+        <RadzenColumn Size="12" SizeMD="3">
+            <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.35rem; display:block;">Output Directory (-o, --Output)</RadzenText>
+            <RadzenTextBox @bind-Value="settings.OutputDirectory" Placeholder="Output directory" Style="width: 100%;" />
+        </RadzenColumn>
+    </RadzenRow>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <RadzenSwitch @bind-Value="settings.IsVerbose" />
+            <RadzenText TextStyle="TextStyle.Body2" Style="color: #334155;">Verbose (-v, --verbose)</RadzenText>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <RadzenSwitch @bind-Value="settings.IsSql" />
+            <RadzenText TextStyle="TextStyle.Body2" Style="color: #334155;">Include SQL extraction (-s, --sql)</RadzenText>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <RadzenSwitch @bind-Value="settings.IsLite" />
+            <RadzenText TextStyle="TextStyle.Body2" Style="color: #334155;">Lite mode (-l, --lite)</RadzenText>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <RadzenSwitch @bind-Value="settings.IsTruncate" />
+            <RadzenText TextStyle="TextStyle.Body2" Style="color: #334155;">Truncate destination first (-t, --truncate)</RadzenText>
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 0.75rem; align-items: center; margin-top: 1.25rem; flex-wrap: wrap;">
+        <RadzenButton Text="Save Settings" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="@SaveAsync" IsBusy="@isSaving" />
+        <RadzenButton Text="Reset" Icon="restore" ButtonStyle="ButtonStyle.Light" Click="@Reset" Disabled="@isSaving" />
+        <RadzenText TextStyle="TextStyle.Caption" Style="color: #64748b;">
+            Last Updated (UTC): @settings.LastUpdatedUtc.ToString("yyyy-MM-dd HH:mm:ss")
+        </RadzenText>
+    </div>
+</RadzenCard>
+
+<RadzenCard Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; background: #ffffff; margin-bottom: 1.25rem;">
+    <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.6rem;">Execute DTSXDataLoader</RadzenText>
+    <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem;">
+        <RadzenButton Text="Run Loader" Icon="play_arrow" ButtonStyle="ButtonStyle.Success" Click="@RunLoaderAsync" Disabled="@isRunning" IsBusy="@isRunning" />
+        <RadzenButton Text="Cancel" Icon="stop" ButtonStyle="ButtonStyle.Danger" Click="@CancelRun" Disabled="@(!isRunning)" />
+    </div>
+
+    <div id="dtsx-loader-log" style="background: #0b1220; color: #e2e8f0; border-radius: 6px; padding: 0.75rem; min-height: 180px; max-height: 300px; overflow-y: auto; font-family: Consolas, monospace; font-size: 0.85rem;">
+        @if (!executionLogs.Any())
+        {
+            <div>No execution output yet.</div>
+        }
+        else
+        {
+            @foreach (var line in executionLogs)
+            {
+                <div>@line</div>
+            }
+        }
+    </div>
+</RadzenCard>
+
+<RadzenCard Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; background: #ffffff; margin-bottom: 1.25rem;">
+    <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.5rem;">Command Preview</RadzenText>
+    <div style="background: #0f172a; color: #f8fafc; border-radius: 6px; padding: 0.8rem 1rem; font-family: Consolas, monospace; font-size: 0.9rem;">
+        @DtsxLoaderSettingsService.BuildCommandPreview(settings)
+    </div>
+</RadzenCard>
+
+<RadzenCard Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; background: #ffffff;">
+    <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.5rem;">Options reviewed from DTSXLoader</RadzenText>
+    <ul style="margin: 0; padding-left: 1.2rem; color: #334155;">
+        <li><b>-v / --verbose</b>: Set output to verbose messages</li>
+        <li><b>-p / --path</b>: Path to individual package or directory of packages</li>
+        <li><b>-s / --sql</b>: SQL extraction mode</li>
+        <li><b>-l / --lite</b>: Mapper and Variables only</li>
+        <li><b>-t / --truncate</b>: Truncate destination tables first</li>
+        <li><b>-x / --extension</b>: Non-.dtsx extension</li>
+        <li><b>-o / --Output</b>: Output directory</li>
+    </ul>
+</RadzenCard>
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Style="margin-top: 1rem;">
+        @statusMessage
+    </RadzenAlert>
+}
+
+@code {
+    private DtsxLoaderSettingsModel settings = new();
+    private bool isSaving;
+    private bool isRunning;
+    private CancellationTokenSource? runCancellationSource;
+    private List<string> executionLogs = new();
+    private string statusMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        settings = await SettingsService.GetAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        isSaving = true;
+        statusMessage = string.Empty;
+
+        try
+        {
+            await SettingsService.SaveAsync(settings);
+            statusMessage = $"Saved DTSX loader settings at {settings.LastUpdatedUtc:yyyy-MM-dd HH:mm:ss} UTC.";
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Failed to save settings: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void Reset()
+    {
+        settings = new DtsxLoaderSettingsModel();
+        statusMessage = "Reset to defaults. Click Save Settings to persist.";
+    }
+
+    private async Task RunLoaderAsync()
+    {
+        if (isRunning)
+        {
+            return;
+        }
+
+        runCancellationSource?.Dispose();
+        runCancellationSource = new CancellationTokenSource();
+        executionLogs = new List<string>();
+        isRunning = true;
+        statusMessage = "Running DTSXDataLoader...";
+
+        try
+        {
+            await SaveAsync();
+
+            var exitCode = await ExecutionService.RunAsync(
+                settings,
+                AppendExecutionLog,
+                runCancellationSource.Token);
+
+            statusMessage = exitCode == 0
+                ? "DTSXDataLoader completed successfully."
+                : $"DTSXDataLoader finished with exit code {exitCode}.";
+        }
+        catch (OperationCanceledException)
+        {
+            statusMessage = "DTSXDataLoader run was cancelled.";
+            AppendExecutionLog("[INFO] Execution cancelled.");
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Failed to execute DTSXDataLoader: {ex.Message}";
+            AppendExecutionLog($"[ERR] {ex.Message}");
+        }
+        finally
+        {
+            isRunning = false;
+            runCancellationSource?.Dispose();
+            runCancellationSource = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void CancelRun()
+    {
+        runCancellationSource?.Cancel();
+    }
+
+    private void AppendExecutionLog(string line)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            executionLogs.Add($"[{DateTime.UtcNow:HH:mm:ss}] {line}");
+            if (executionLogs.Count > 500)
+            {
+                executionLogs.RemoveAt(0);
+            }
+
+            StateHasChanged();
+            await JSRuntime.InvokeVoidAsync("scrollDtsxLoaderLogToBottom", "dtsx-loader-log");
+        });
+    }
+
+    public void Dispose()
+    {
+        runCancellationSource?.Cancel();
+        runCancellationSource?.Dispose();
+    }
+}

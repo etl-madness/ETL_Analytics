@@ -1,0 +1,1387 @@
+@page "/import-and-data"
+@using EtlAnalytics.App.Models
+@using EtlAnalytics.App.Services
+@using Radzen.Blazor
+
+<PageTitle>AutoSys JIL Importer</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4" Style="font-weight: 700; color: #0f172a; margin-bottom: 0.25rem;">AutoSys JIL
+    Importer</RadzenText>
+    <RadzenText TextStyle="TextStyle.Subtitle1" Style="color: #64748b; margin-bottom: 2rem;">Upload an AutoSys JIL file and
+        view the parsed jobs in a grid. The importer also shows the SQL table definition needed to store the rows.
+    </RadzenText>
+
+    <RadzenRow Gap="1.5rem" class="mb-4">
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard
+                Style="height: 100%; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; background: #ffffff;">
+                <RadzenText TextStyle="TextStyle.Subtitle2"
+                            Style="color: #475569; font-weight: 600; margin-bottom: 0.5rem;">Import JIL File</RadzenText>
+                <div style="position: relative; display: inline-block; width: 100%;">
+                    <InputFile OnChange="OnFileSelected" class="form-control"
+                               style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.375rem 0.75rem;" />
+                </div>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard
+                Style="height: 100%; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; background: #ffffff;">
+                <RadzenText TextStyle="TextStyle.Subtitle2"
+                            Style="color: #475569; font-weight: 600; margin-bottom: 0.5rem;">Sample Source</RadzenText>
+                <div style="display: flex; gap: 0.5rem; width: 100%;">
+                    <input class="form-control" value="@sampleFileName" readonly
+                           style="background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.375rem 0.75rem; flex-grow: 1;" />
+                    <RadzenButton Click="@LoadSampleAsync" Text="Load Sample" ButtonStyle="ButtonStyle.Secondary"
+                                  Icon="play_arrow" Style="border-radius: 6px;" />
+                </div>
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat"
+                     Style="margin-bottom: 1.5rem; border-radius: 8px;">
+            @statusMessage
+        </RadzenAlert>
+    }
+
+    @if (importResult?.Jobs?.Any() == true)
+    {
+        <RadzenCard
+            Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; background: #ffffff; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                <RadzenText TextStyle="TextStyle.H6" Style="color: #1e293b; font-weight: 600; margin: 0;">Imported Jobs
+                </RadzenText>
+                <RadzenButton Click="@SaveToDatabaseAsync" Text="@(isSaving ? "Saving..." : "Save to Database")"
+                              ButtonStyle="ButtonStyle.Primary" Icon="save" Disabled="@isSaving"
+                              Style="border-radius: 6px; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1);" />
+            </div>
+
+            <RadzenDataGrid Data="@importResult.Jobs" TItem="JilJob" AllowFiltering="true" AllowPaging="true" PageSize="10"
+                            AllowSorting="true" AllowColumnResize="true" class="w-100"
+                            Style="border-radius: 6px; border: 1px solid #e2e8f0;">
+                <Columns>
+                    <RadzenDataGridColumn TItem="JilJob" Property="JobName" Title="Job Name" Width="180px" />
+                    <RadzenDataGridColumn TItem="JilJob" Property="JobType" Title="Job Type" Width="120px" />
+                    <RadzenDataGridColumn TItem="JilJob" Property="Machine" Title="Machine" Width="120px" />
+                    <RadzenDataGridColumn TItem="JilJob" Property="Owner" Title="Owner" Width="120px" />
+                    <RadzenDataGridColumn TItem="JilJob" Property="StartTimes" Title="Start Times" Width="140px" />
+                    <RadzenDataGridColumn TItem="JilJob" Property="StartMins" Title="Start Mins" Width="120px" />
+                    <RadzenDataGridColumn TItem="JilJob" Property="Description" Title="Description" />
+                    <RadzenDataGridColumn TItem="JilJob" Property="Application" Title="Application" Width="120px" />
+                </Columns>
+            </RadzenDataGrid>
+        </RadzenCard>
+
+        <RadzenCard
+            Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <RadzenText TextStyle="TextStyle.H6" Style="color: #1e293b; font-weight: 600; margin: 0;">SQL Table Definition
+                </RadzenText>
+                <RadzenButton Click="@ToggleSqlDefinition" Text="@(showSqlDefinition ? "Hide SQL" : "Show SQL")"
+                              ButtonStyle="ButtonStyle.Light" Icon="@(showSqlDefinition ? "visibility_off" : "visibility")"
+                              Style="border-radius: 6px;" />
+            </div>
+            @if (showSqlDefinition)
+            {
+                <div
+                    style="background-color: #0f172a; color: #f8fafc; padding: 1.25rem; border-radius: 6px; font-family: 'Courier New', Courier, monospace; overflow-x: auto; margin-top: 1rem;">
+                    <pre
+                    style="margin: 0; white-space: pre-wrap; font-size: 0.9rem; line-height: 1.5;">@importResult.SqlTableDefinition</pre>
+                </div>
+            }
+        </RadzenCard>
+    }
+
+    <RadzenCard
+        Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-top: 2rem;">
+        <div
+            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+            <div>
+                <RadzenText TextStyle="TextStyle.H6" Style="color: #1e293b; font-weight: 600; margin: 0;">Job to Package
+                    Mappings</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2" Style="color: #64748b; margin: 0;">Manage the mappings of AutoSys
+                        jobs to SSIS packages in the database.</RadzenText>
+                    </div>
+                    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                        <div style="position: relative; display: inline-block;">
+                            <RadzenButton Text="Import CSV" Icon="upload" ButtonStyle="ButtonStyle.Secondary"
+                                          Style="border-radius: 6px; pointer-events: none;" />
+                            <InputFile OnChange="OnCsvFileSelected"
+                                       style="position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer;" />
+                        </div>
+                        <RadzenButton Click="@ExportToCsvAsync" Text="Export CSV" ButtonStyle="ButtonStyle.Info" Icon="download"
+                                      Style="border-radius: 6px;" Disabled="@IsExportDisabled" />
+                        <RadzenButton Click="@ConfirmTruncateAsync" Text="Truncate Mappings" ButtonStyle="ButtonStyle.Danger"
+                                      Icon="delete_sweep" Style="border-radius: 6px;" />
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(mappingStatusMessage))
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat"
+                                 Style="margin-bottom: 1rem; border-radius: 6px;">
+                        @mappingStatusMessage
+                    </RadzenAlert>
+                }
+
+                <RadzenDataGrid @ref="mappingGrid" Data="@mappings" TItem="AutoSysJobToPackage" AllowFiltering="true"
+                                AllowPaging="true" PageSize="10" AllowSorting="true" AllowColumnResize="true" EditMode="DataGridEditMode.Single"
+                                RowUpdate="@OnUpdateRow" RowCreate="@OnCreateRow" Sort="@ResetEdit" Page="@ResetEdit" Filter="@ResetEdit"
+                                class="w-100" Style="border-radius: 6px; border: 1px solid #e2e8f0;">
+                    <HeaderTemplate>
+                        <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                            <RadzenButton ButtonStyle="ButtonStyle.Primary" Icon="add_circle" Text="Add New Mapping"
+                                          Click="@InsertRow" Disabled="@(rowToInsert != null || rowToUpdate != null)"
+                                          Style="border-radius: 6px;" />
+                            @if (unsavedManuallyAdded.Any())
+                            {
+                                <RadzenButton ButtonStyle="ButtonStyle.Success" Icon="save" Text="@GetSaveButtonText()"
+                                              Click="@SaveManualEntriesAsync" Style="border-radius: 6px;" />
+                            }
+                        </div>
+                    </HeaderTemplate>
+                    <Columns>
+                        <RadzenDataGridColumn TItem="AutoSysJobToPackage" Property="JobName" Title="Job Name" Width="30%">
+                            <Template Context="item">
+                                @item.JobName
+                            </Template>
+                            <EditTemplate Context="item">
+                                <RadzenTextBox @bind-Value="item.JobName" Style="width: 100%;" Name="JobName" />
+                                <RadzenRequiredValidator Text="Job Name is required" Component="JobName" Popup="true"
+                                                         Style="position: absolute; z-index: 999;" />
+                            </EditTemplate>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="AutoSysJobToPackage" Property="PackageName" Title="Package Name" Width="30%">
+                            <Template Context="item">
+                                @item.PackageName
+                            </Template>
+                            <EditTemplate Context="item">
+                                <RadzenTextBox @bind-Value="item.PackageName" Style="width: 100%;" Name="PackageName" />
+                                <RadzenRequiredValidator Text="Package Name is required" Component="PackageName" Popup="true"
+                                                         Style="position: absolute; z-index: 999;" />
+                            </EditTemplate>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="AutoSysJobToPackage" Property="ImportedAt" Title="Imported At (UTC)"
+                                              Width="25%">
+                            <Template Context="item">
+                                @item.ImportedAt.ToString("yyyy-MM-dd HH:mm:ss")
+                            </Template>
+                            <EditTemplate Context="item">
+                                <RadzenDatePicker TValue="DateTime" @bind-Value="item.ImportedAt" ShowTime="true" HourFormat="24"
+                                                  DateFormat="yyyy-MM-dd HH:mm:ss" Style="width: 100%;" />
+                            </EditTemplate>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="AutoSysJobToPackage" Context="item" Filterable="false" Sortable="false"
+                                              TextAlign="TextAlign.Center" Width="15%">
+                            <Template Context="item">
+                                <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                                              Size="ButtonSize.Medium" Click="@(args => EditRow(item))" @onclick:stopPropagation="true"
+                                              Style="border-radius: 6px;">
+                                </RadzenButton>
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete" Variant="Variant.Flat"
+                                              Size="ButtonSize.Medium" class="ms-1" Click="@(args => DeleteRow(item))"
+                                              @onclick:stopPropagation="true" Style="border-radius: 6px;">
+                                </RadzenButton>
+                            </Template>
+                            <EditTemplate Context="item">
+                                <RadzenButton Icon="check" ButtonStyle="ButtonStyle.Success" Variant="Variant.Flat"
+                                              Size="ButtonSize.Medium" Click="@((args) => SaveRow(item))" Style="border-radius: 6px;">
+                                </RadzenButton>
+                                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                                              Size="ButtonSize.Medium" class="ms-1" Click="@((args) => CancelEdit(item))"
+                                              Style="border-radius: 6px;">
+                                </RadzenButton>
+                            </EditTemplate>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </RadzenCard>
+
+            <RadzenCard
+                Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-top: 2rem;">
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <RadzenText TextStyle="TextStyle.H6" Style="color: #1e293b; font-weight: 600; margin: 0;">Package to Object
+                            Mappings</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Body2" Style="color: #64748b; margin: 0;">Manage the SSIS package to
+                                database object mappings.</RadzenText>
+                            </div>
+                            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                                <div style="position: relative; display: inline-block;">
+                                    <RadzenButton Text="Import CSV" Icon="upload" ButtonStyle="ButtonStyle.Secondary"
+                                                  Style="border-radius: 6px; pointer-events: none;" />
+                                    <InputFile OnChange="OnP2OCsvFileSelected"
+                                               style="position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer;" />
+                                </div>
+                                <RadzenButton Click="@ExportP2OToCsvAsync" Text="Export CSV" ButtonStyle="ButtonStyle.Info" Icon="download"
+                                              Style="border-radius: 6px;" Disabled="@IsP2OExportDisabled" />
+                                <RadzenButton Click="@ConfirmP2OTruncateAsync" Text="Truncate Table" ButtonStyle="ButtonStyle.Danger"
+                                              Icon="delete_sweep" Style="border-radius: 6px;" />
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(p2oStatusMessage))
+                        {
+                            <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat"
+                                         Style="margin-bottom: 1rem; border-radius: 6px;">
+                                @p2oStatusMessage
+                            </RadzenAlert>
+                        }
+
+                        <RadzenDataGrid @ref="p2oGrid" Data="@p2oRows" TItem="AutoSysPackageToObject" AllowFiltering="true"
+                                        AllowPaging="true" PageSize="10" AllowSorting="true" AllowColumnResize="true" EditMode="DataGridEditMode.Single"
+                                        RowUpdate="@OnP2OUpdateRow" RowCreate="@OnP2OCreateRow" Sort="@ResetP2OEdit" Page="@ResetP2OEdit"
+                                        Filter="@ResetP2OEdit" class="w-100" Style="border-radius: 6px; border: 1px solid #e2e8f0;">
+                            <HeaderTemplate>
+                                <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                                    <RadzenButton ButtonStyle="ButtonStyle.Primary" Icon="add_circle" Text="Add New Row"
+                                                  Click="@InsertP2ORow" Disabled="@(p2oRowToInsert != null || p2oRowToUpdate != null)"
+                                                  Style="border-radius: 6px;" />
+                                    @if (p2oUnsaved.Any())
+                                    {
+                                        <RadzenButton ButtonStyle="ButtonStyle.Success" Icon="save" Text="@GetP2OSaveButtonText()"
+                                                      Click="@SaveP2OManualEntriesAsync" Style="border-radius: 6px;" />
+                                    }
+                                </div>
+                            </HeaderTemplate>
+                            <Columns>
+                                <RadzenDataGridColumn TItem="AutoSysPackageToObject" Property="PackageName" Title="Package Name"
+                                                      Width="160px">
+                                    <Template Context="item">@item.PackageName</Template>
+                                    <EditTemplate Context="item">
+                                        <RadzenTextBox @bind-Value="item.PackageName" Style="width:100%;" Name="P2OPackageName" />
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="AutoSysPackageToObject" Property="DatabaseServer" Title="DB Server"
+                                                      Width="130px">
+                                    <Template Context="item">@item.DatabaseServer</Template>
+                                    <EditTemplate Context="item">
+                                        <RadzenTextBox @bind-Value="item.DatabaseServer" Style="width:100%;" Name="P2ODbServer" />
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="AutoSysPackageToObject" Property="Database" Title="Database" Width="120px">
+                                    <Template Context="item">@item.Database</Template>
+                                    <EditTemplate Context="item">
+                                        <RadzenTextBox @bind-Value="item.Database" Style="width:100%;" Name="P2ODatabase" />
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="AutoSysPackageToObject" Property="Schema" Title="Schema" Width="100px">
+                                    <Template Context="item">@item.Schema</Template>
+                                    <EditTemplate Context="item">
+                                        <RadzenTextBox @bind-Value="item.Schema" Style="width:100%;" Name="P2OSchema" />
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="AutoSysPackageToObject" Property="ObjectName" Title="Object Name"
+                                                      Width="160px">
+                                    <Template Context="item">@item.ObjectName</Template>
+                                    <EditTemplate Context="item">
+                                        <RadzenTextBox @bind-Value="item.ObjectName" Style="width:100%;" Name="P2OObjectName" />
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="AutoSysPackageToObject" Property="ObjectType" Title="Object Type"
+                                                      Width="110px">
+                                    <Template Context="item">@item.ObjectType</Template>
+                                    <EditTemplate Context="item">
+                                        <RadzenTextBox @bind-Value="item.ObjectType" Style="width:100%;" Name="P2OObjectType" />
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="AutoSysPackageToObject" Property="ImportedAt" Title="Imported At (UTC)"
+                                                      Width="160px">
+                                    <Template Context="item">@item.ImportedAt.ToString("yyyy-MM-dd HH:mm:ss")</Template>
+                                    <EditTemplate Context="item">
+                                        <RadzenDatePicker TValue="DateTime" @bind-Value="item.ImportedAt" ShowTime="true" HourFormat="24"
+                                                          DateFormat="yyyy-MM-dd HH:mm:ss" Style="width:100%;" />
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="AutoSysPackageToObject" Context="item" Filterable="false" Sortable="false"
+                                                      TextAlign="TextAlign.Center" Width="110px">
+                                    <Template Context="item">
+                                        <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                                                      Size="ButtonSize.Medium" Click="@(args => EditP2ORow(item))" @onclick:stopPropagation="true"
+                                                      Style="border-radius:6px;" />
+                                        <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Flat"
+                                                      Size="ButtonSize.Medium" class="ms-1" Click="@(args => DeleteP2ORow(item))"
+                                                      @onclick:stopPropagation="true" Style="border-radius:6px;" />
+                                    </Template>
+                                    <EditTemplate Context="item">
+                                        <RadzenButton Icon="check" ButtonStyle="ButtonStyle.Success" Variant="Variant.Flat"
+                                                      Size="ButtonSize.Medium" Click="@(args => SaveP2ORow(item))" Style="border-radius:6px;" />
+                                        <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                                                      Size="ButtonSize.Medium" class="ms-1" Click="@(args => CancelP2OEdit(item))"
+                                                      Style="border-radius:6px;" />
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    </RadzenCard>
+
+                    <RadzenCard
+                        Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-top: 2rem;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                            <div>
+                                <RadzenText TextStyle="TextStyle.H6" Style="color: #1e293b; font-weight: 600; margin: 0;">AutoSys Runtime
+                                    Jobs</RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Body2" Style="color: #64748b; margin: 0;">Manage the runtime executions of
+                                        AutoSys jobs.</RadzenText>
+                                    </div>
+                                    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                                        <div style="position: relative; display: inline-block;">
+                                            <RadzenButton Text="Import CSV" Icon="upload" ButtonStyle="ButtonStyle.Secondary"
+                                                          Style="border-radius: 6px; pointer-events: none;" />
+                                            <InputFile OnChange="OnRuntimeCsvFileSelected"
+                                                       style="position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer;" />
+                                        </div>
+                                        <RadzenButton Click="@ExportRuntimeToCsvAsync" Text="Export CSV" ButtonStyle="ButtonStyle.Info"
+                                                      Icon="download" Style="border-radius: 6px;" Disabled="@IsRuntimeExportDisabled" />
+                                        <RadzenButton Click="@ConfirmRuntimeTruncateAsync" Text="Truncate Table" ButtonStyle="ButtonStyle.Danger"
+                                                      Icon="delete_sweep" Style="border-radius: 6px;" />
+                                    </div>
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(runtimeStatusMessage))
+                                {
+                                    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat"
+                                                 Style="margin-bottom: 1rem; border-radius: 6px;">
+                                        @runtimeStatusMessage
+                                    </RadzenAlert>
+                                }
+
+                                <RadzenDataGrid @ref="runtimeGrid" Data="@runtimeRows" TItem="AutoSysRuntimeJob" AllowFiltering="true"
+                                                AllowPaging="true" PageSize="10" AllowSorting="true" AllowColumnResize="true" EditMode="DataGridEditMode.Single"
+                                                RowUpdate="@OnRuntimeUpdateRow" RowCreate="@OnRuntimeCreateRow" Sort="@ResetRuntimeEdit"
+                                                Page="@ResetRuntimeEdit" Filter="@ResetRuntimeEdit" class="w-100"
+                                                Style="border-radius: 6px; border: 1px solid #e2e8f0;">
+                                    <HeaderTemplate>
+                                        <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                                            <RadzenButton ButtonStyle="ButtonStyle.Primary" Icon="add_circle" Text="Add New Row"
+                                                          Click="@InsertRuntimeRow" Disabled="@(runtimeRowToInsert != null || runtimeRowToUpdate != null)"
+                                                          Style="border-radius: 6px;" />
+                                            @if (runtimeUnsaved.Any())
+                                            {
+                                                <RadzenButton ButtonStyle="ButtonStyle.Success" Icon="save" Text="@GetRuntimeSaveButtonText()"
+                                                              Click="@SaveRuntimeManualEntriesAsync" Style="border-radius: 6px;" />
+                                            }
+                                        </div>
+                                    </HeaderTemplate>
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="AutoSysRuntimeJob" Property="JobName" Title="Job Name" Width="200px">
+                                            <Template Context="item">@item.JobName</Template>
+                                            <EditTemplate Context="item">
+                                                <RadzenTextBox @bind-Value="item.JobName" Style="width:100%;" Name="RuntimeJobName" />
+                                            </EditTemplate>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="AutoSysRuntimeJob" Property="JobStatus" Title="Job Status" Width="150px">
+                                            <Template Context="item">@item.JobStatus</Template>
+                                            <EditTemplate Context="item">
+                                                <RadzenTextBox @bind-Value="item.JobStatus" Style="width:100%;" Name="RuntimeJobStatus" />
+                                            </EditTemplate>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="AutoSysRuntimeJob" Property="RunTimeInMinutes" Title="Run Time (Mins)"
+                                                              Width="150px">
+                                            <Template Context="item">@item.RunTimeInMinutes</Template>
+                                            <EditTemplate Context="item">
+                                                <RadzenNumeric TValue="decimal?" @bind-Value="item.RunTimeInMinutes" Style="width:100%;"
+                                                               Name="RuntimeRunTimeInMinutes" />
+                                            </EditTemplate>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="AutoSysRuntimeJob" Property="InsertedAt" Title="Inserted At (UTC)"
+                                                              Width="200px">
+                                            <Template Context="item">@item.InsertedAt.ToString("yyyy-MM-dd HH:mm:ss")</Template>
+                                            <EditTemplate Context="item">
+                                                <RadzenDatePicker TValue="DateTime" @bind-Value="item.InsertedAt" ShowTime="true" HourFormat="24"
+                                                                  DateFormat="yyyy-MM-dd HH:mm:ss" Style="width:100%;" />
+                                            </EditTemplate>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="AutoSysRuntimeJob" Context="item" Filterable="false" Sortable="false"
+                                                              TextAlign="TextAlign.Center" Width="120px">
+                                            <Template Context="item">
+                                                <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                                                              Size="ButtonSize.Medium" Click="@(args => EditRuntimeRow(item))" @onclick:stopPropagation="true"
+                                                              Style="border-radius:6px;" />
+                                                <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Flat"
+                                                              Size="ButtonSize.Medium" class="ms-1" Click="@(args => DeleteRuntimeRow(item))"
+                                                              @onclick:stopPropagation="true" Style="border-radius:6px;" />
+                                            </Template>
+                                            <EditTemplate Context="item">
+                                                <RadzenButton Icon="check" ButtonStyle="ButtonStyle.Success" Variant="Variant.Flat"
+                                                              Size="ButtonSize.Medium" Click="@(args => SaveRuntimeRow(item))" Style="border-radius:6px;" />
+                                                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                                                              Size="ButtonSize.Medium" class="ms-1" Click="@(args => CancelRuntimeEdit(item))"
+                                                              Style="border-radius:6px;" />
+                                            </EditTemplate>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </RadzenCard>
+
+@code {
+    [Inject]
+    private SqlDatabaseService SqlDatabaseService { get; set; } = default!;
+
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = default!;
+
+    private JilImportResult? importResult;
+    private string statusMessage = string.Empty;
+    private string sampleFileName = "production.jils";
+    private bool isSaving;
+    private bool showSqlDefinition;
+
+    private List<AutoSysJobToPackage> mappings = new();
+    private List<AutoSysJobToPackage> unsavedManuallyAdded = new();
+    private RadzenDataGrid<AutoSysJobToPackage> mappingGrid = default!;
+    private AutoSysJobToPackage? rowToInsert;
+    private AutoSysJobToPackage? rowToUpdate;
+    private string? originalJobName;
+    private string? originalPackageName;
+    private string mappingStatusMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMappingsAsync();
+        await LoadP2OAsync();
+        await LoadRuntimeJobsAsync();
+    }
+
+    private async Task LoadMappingsAsync()
+    {
+        try
+        {
+            await SqlDatabaseService.CreateJobToPackageTableIfNotExistsAsync();
+            var list = await SqlDatabaseService.GetJobToPackagesAsync();
+            mappings = list.ToList();
+            if (unsavedManuallyAdded.Any())
+            {
+                mappings.InsertRange(0, unsavedManuallyAdded);
+            }
+        }
+        catch (Exception ex)
+        {
+            mappingStatusMessage = $"Error loading mappings: {ex.Message}";
+        }
+    }
+
+    private void ResetEdit()
+    {
+        rowToInsert = null;
+        rowToUpdate = null;
+        originalJobName = null;
+        originalPackageName = null;
+    }
+
+    private async Task InsertRow()
+    {
+        rowToInsert = new AutoSysJobToPackage { ImportedAt = DateTime.UtcNow };
+        await mappingGrid.InsertRow(rowToInsert);
+    }
+
+    private async Task OnCreateRow(AutoSysJobToPackage entry)
+    {
+        try
+        {
+            unsavedManuallyAdded.Add(entry);
+            if (!mappings.Contains(entry))
+            {
+                mappings.Insert(0, entry);
+            }
+            mappingStatusMessage = $"Added mapping for job '{entry.JobName}' to unsaved changes. Click 'Save Manual Entries' to persist to the database.";
+            rowToInsert = null;
+            await mappingGrid.Reload();
+        }
+        catch (Exception ex)
+        {
+            mappingStatusMessage = $"Error adding mapping: {ex.Message}";
+            mappingGrid.CancelEditRow(entry);
+            rowToInsert = null;
+        }
+    }
+
+    private async Task EditRow(AutoSysJobToPackage row)
+    {
+        if (rowToInsert != null)
+        {
+            mappingGrid.CancelEditRow(rowToInsert);
+            rowToInsert = null;
+        }
+        originalJobName = row.JobName;
+        originalPackageName = row.PackageName;
+        rowToUpdate = row;
+        await mappingGrid.EditRow(row);
+    }
+
+    private async Task OnUpdateRow(AutoSysJobToPackage entry)
+    {
+        try
+        {
+            if (rowToUpdate != null && originalJobName != null && originalPackageName != null)
+            {
+                var isUnsaved = unsavedManuallyAdded.Any(m => m == entry);
+                if (isUnsaved)
+                {
+                    mappingStatusMessage = $"Updated pending mapping for job '{entry.JobName}'.";
+                }
+                else
+                {
+                    await SqlDatabaseService.UpdateJobToPackageAsync(originalJobName, originalPackageName, entry);
+                    mappingStatusMessage = $"Successfully updated mapping for job '{entry.JobName}'.";
+                }
+            }
+            rowToUpdate = null;
+            originalJobName = null;
+            originalPackageName = null;
+            await mappingGrid.Reload();
+        }
+        catch (Exception ex)
+        {
+            mappingStatusMessage = $"Error updating mapping: {ex.Message}";
+            mappingGrid.CancelEditRow(entry);
+            rowToUpdate = null;
+            originalJobName = null;
+            originalPackageName = null;
+        }
+    }
+
+    private async Task SaveRow(AutoSysJobToPackage entry)
+    {
+        await mappingGrid.UpdateRow(entry);
+    }
+
+    private void CancelEdit(AutoSysJobToPackage entry)
+    {
+        if (entry == rowToInsert)
+        {
+            rowToInsert = null;
+        }
+        else
+        {
+            rowToUpdate = null;
+            originalJobName = null;
+            originalPackageName = null;
+        }
+
+        mappingGrid.CancelEditRow(entry);
+    }
+
+    private async Task DeleteRow(AutoSysJobToPackage entry)
+    {
+        if (entry == rowToInsert)
+        {
+            rowToInsert = null;
+            mappingGrid.CancelEditRow(entry);
+            return;
+        }
+
+        try
+        {
+            var isUnsaved = unsavedManuallyAdded.Any(m => m == entry);
+            if (isUnsaved)
+            {
+                unsavedManuallyAdded.Remove(entry);
+                mappings.Remove(entry);
+                mappingStatusMessage = $"Removed pending mapping for job '{entry.JobName}'.";
+                await mappingGrid.Reload();
+            }
+            else
+            {
+                await SqlDatabaseService.DeleteJobToPackageAsync(entry);
+                mappingStatusMessage = $"Successfully deleted mapping for job '{entry.JobName}'.";
+                await LoadMappingsAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            mappingStatusMessage = $"Error deleting mapping: {ex.Message}";
+        }
+    }
+
+    private async Task ConfirmTruncateAsync()
+    {
+        try
+        {
+            await SqlDatabaseService.TruncateJobToPackageAsync();
+            unsavedManuallyAdded.Clear();
+            mappingStatusMessage = "Successfully truncated all job-to-package mappings.";
+            await LoadMappingsAsync();
+        }
+        catch (Exception ex)
+        {
+            mappingStatusMessage = $"Error truncating mappings: {ex.Message}";
+        }
+    }
+
+    private async Task SaveManualEntriesAsync()
+    {
+        if (!unsavedManuallyAdded.Any()) return;
+
+        try
+        {
+            var count = await SqlDatabaseService.InsertJobToPackagesAsync(unsavedManuallyAdded);
+            mappingStatusMessage = $"Successfully saved {count} manually added entries to the database.";
+            unsavedManuallyAdded.Clear();
+            await LoadMappingsAsync();
+        }
+        catch (Exception ex)
+        {
+            mappingStatusMessage = $"Error saving manual entries: {ex.Message}";
+        }
+    }
+
+    private async Task OnCsvFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 5_000_000);
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+            var list = ParseCsv(content);
+            if (list.Count > 0)
+            {
+                var count = await SqlDatabaseService.InsertJobToPackagesAsync(list);
+                mappingStatusMessage = $"Successfully imported {count} mappings from CSV.";
+                await LoadMappingsAsync();
+            }
+            else
+            {
+                mappingStatusMessage = "No valid records found in the CSV file.";
+            }
+        }
+        catch (Exception ex)
+        {
+            mappingStatusMessage = $"CSV Import failed: {ex.Message}";
+        }
+    }
+
+    private List<AutoSysJobToPackage> ParseCsv(string csvText)
+    {
+        var list = new List<AutoSysJobToPackage>();
+        var lines = csvText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var utcNow = DateTime.UtcNow;
+
+        bool isFirst = true;
+        foreach (var line in lines)
+        {
+            var parts = line.Split(',');
+            if (parts.Length < 2) continue;
+
+            var job = parts[0].Trim().Trim('"');
+            var pkg = parts[1].Trim().Trim('"');
+
+            if (isFirst)
+            {
+                isFirst = false;
+                if (string.Equals(job, "JobName", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(job, "Job Name", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(pkg, "PackageName", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(pkg, "Package Name", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(job) && !string.IsNullOrWhiteSpace(pkg))
+            {
+                list.Add(new AutoSysJobToPackage
+                {
+                    JobName = job,
+                    PackageName = pkg,
+                    ImportedAt = utcNow
+                });
+            }
+        }
+        return list;
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null)
+        {
+            return;
+        }
+
+        await ImportStreamAsync(file.Name, file.OpenReadStream(maxAllowedSize: 10_000_000));
+    }
+
+    private async Task LoadSampleAsync()
+    {
+        var samplePath = Path.Combine(Directory.GetCurrentDirectory(), "..", "JILS", "production.jils");
+        if (!File.Exists(samplePath))
+        {
+            statusMessage = $"Sample file not found at {samplePath}.";
+            return;
+        }
+
+        await ImportFileAsync(Path.GetFileName(samplePath), samplePath);
+    }
+
+    private async Task ImportStreamAsync(string fileName, Stream sourceStream)
+    {
+        try
+        {
+            using var stream = sourceStream;
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+            importResult = JilParser.Parse(content, fileName);
+            statusMessage = $"Imported {importResult.Jobs.Count} jobs from {fileName}.";
+            sampleFileName = fileName;
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Import failed: {ex.Message}";
+        }
+    }
+
+    private async Task ImportFileAsync(string fileName, string filePath)
+    {
+        try
+        {
+            var content = await File.ReadAllTextAsync(filePath);
+            importResult = JilParser.Parse(content, fileName);
+            statusMessage = $"Imported {importResult.Jobs.Count} jobs from {fileName}.";
+            sampleFileName = fileName;
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Import failed: {ex.Message}";
+        }
+    }
+
+    private async Task SaveToDatabaseAsync()
+    {
+        if (importResult?.Jobs == null || !importResult.Jobs.Any())
+        {
+            statusMessage = "Import a JIL file before saving.";
+            return;
+        }
+
+        try
+        {
+            isSaving = true;
+            await SqlDatabaseService.CreateTableIfNotExistsAsync();
+            var inserted = await SqlDatabaseService.InsertJobsAsync(importResult.Jobs);
+            statusMessage = $"Saved {inserted} jobs to the database.";
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Save failed: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ToggleSqlDefinition()
+    {
+        showSqlDefinition = !showSqlDefinition;
+    }
+
+    private async Task ExportToCsvAsync()
+    {
+        if (mappings == null || !mappings.Any())
+        {
+            mappingStatusMessage = "No mappings available to export.";
+            return;
+        }
+
+        try
+        {
+            var csvBuilder = new System.Text.StringBuilder();
+            csvBuilder.AppendLine("JobName,PackageName,ImportedAt");
+
+            foreach (var mapping in mappings)
+            {
+                var escapedJobName = EscapeCsvValue(mapping.JobName);
+                var escapedPackageName = EscapeCsvValue(mapping.PackageName);
+                var formattedDate = mapping.ImportedAt.ToString("yyyy-MM-dd HH:mm:ss");
+
+                csvBuilder.AppendLine($"{escapedJobName},{escapedPackageName},{formattedDate}");
+            }
+
+            var fileName = $"job_to_package_mappings_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+            await JSRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, csvBuilder.ToString());
+            mappingStatusMessage = $"Exported {mappings.Count} mappings to {fileName}.";
+        }
+        catch (Exception ex)
+        {
+            mappingStatusMessage = $"Export failed: {ex.Message}";
+        }
+    }
+
+    private string EscapeCsvValue(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        if (value.Contains(",") || value.Contains("\"") || value.Contains("\r") || value.Contains("\n"))
+        {
+            var replaced = value.Replace("\"", "\"\"");
+            return "\"" + replaced + "\"";
+        }
+        return value;
+    }
+
+    private string GetSaveButtonText()
+    {
+        return $"Save Manual Entries ({unsavedManuallyAdded.Count})";
+    }
+
+    private bool IsExportDisabled => mappings == null || !mappings.Any();
+
+    // ─── Package to Object state ────────────────────────────────────────────
+
+    private List<AutoSysPackageToObject> p2oRows = new();
+    private List<AutoSysPackageToObject> p2oUnsaved = new();
+    private RadzenDataGrid<AutoSysPackageToObject> p2oGrid = default!;
+    private AutoSysPackageToObject? p2oRowToInsert;
+    private AutoSysPackageToObject? p2oRowToUpdate;
+    private AutoSysPackageToObject? p2oOriginal;
+    private string p2oStatusMessage = string.Empty;
+
+    private async Task LoadP2OAsync()
+    {
+        try
+        {
+            await SqlDatabaseService.CreatePackageToObjectTableIfNotExistsAsync();
+            var list = await SqlDatabaseService.GetPackageToObjectsAsync();
+            p2oRows = list.ToList();
+            if (p2oUnsaved.Any())
+                p2oRows.InsertRange(0, p2oUnsaved);
+        }
+        catch (Exception ex)
+        {
+            p2oStatusMessage = $"Error loading package-to-object rows: {ex.Message}";
+        }
+    }
+
+    private void ResetP2OEdit()
+    {
+        p2oRowToInsert = null;
+        p2oRowToUpdate = null;
+        p2oOriginal = null;
+    }
+
+    private async Task InsertP2ORow()
+    {
+        p2oRowToInsert = new AutoSysPackageToObject { ImportedAt = DateTime.UtcNow };
+        await p2oGrid.InsertRow(p2oRowToInsert);
+    }
+
+    private async Task OnP2OCreateRow(AutoSysPackageToObject entry)
+    {
+        try
+        {
+            p2oUnsaved.Add(entry);
+            if (!p2oRows.Contains(entry))
+                p2oRows.Insert(0, entry);
+            p2oStatusMessage = $"Added row for package '{entry.PackageName}'. Click 'Save Manual Entries' to persist.";
+            p2oRowToInsert = null;
+            await p2oGrid.Reload();
+        }
+        catch (Exception ex)
+        {
+            p2oStatusMessage = $"Error adding row: {ex.Message}";
+            p2oGrid.CancelEditRow(entry);
+            p2oRowToInsert = null;
+        }
+    }
+
+    private async Task EditP2ORow(AutoSysPackageToObject row)
+    {
+        if (p2oRowToInsert != null)
+        {
+            p2oGrid.CancelEditRow(p2oRowToInsert);
+            p2oRowToInsert = null;
+        }
+        // store a snapshot of original values for the WHERE clause
+        p2oOriginal = new AutoSysPackageToObject
+        {
+            PackageName = row.PackageName,
+            DatabaseServer = row.DatabaseServer,
+            Database = row.Database,
+            Schema = row.Schema,
+            ObjectName = row.ObjectName,
+            ObjectType = row.ObjectType,
+            ImportedAt = row.ImportedAt
+        };
+        p2oRowToUpdate = row;
+        await p2oGrid.EditRow(row);
+    }
+
+    private async Task OnP2OUpdateRow(AutoSysPackageToObject entry)
+    {
+        try
+        {
+            bool isUnsaved = p2oUnsaved.Any(r => r == entry);
+            if (!isUnsaved && p2oOriginal != null)
+            {
+                await SqlDatabaseService.UpdatePackageToObjectAsync(p2oOriginal, entry);
+                p2oStatusMessage = $"Updated row for package '{entry.PackageName}'.";
+            }
+            else
+            {
+                p2oStatusMessage = $"Updated pending row for package '{entry.PackageName}'.";
+            }
+            p2oRowToUpdate = null;
+            p2oOriginal = null;
+            await p2oGrid.Reload();
+        }
+        catch (Exception ex)
+        {
+            p2oStatusMessage = $"Error updating row: {ex.Message}";
+            p2oGrid.CancelEditRow(entry);
+            p2oRowToUpdate = null;
+            p2oOriginal = null;
+        }
+    }
+
+    private async Task SaveP2ORow(AutoSysPackageToObject entry)
+        => await p2oGrid.UpdateRow(entry);
+
+    private void CancelP2OEdit(AutoSysPackageToObject entry)
+    {
+        if (entry == p2oRowToInsert)
+            p2oRowToInsert = null;
+        else
+        {
+            p2oRowToUpdate = null;
+            p2oOriginal = null;
+        }
+        p2oGrid.CancelEditRow(entry);
+    }
+
+    private async Task DeleteP2ORow(AutoSysPackageToObject entry)
+    {
+        if (entry == p2oRowToInsert)
+        {
+            p2oRowToInsert = null;
+            p2oGrid.CancelEditRow(entry);
+            return;
+        }
+        try
+        {
+            if (p2oUnsaved.Any(r => r == entry))
+            {
+                p2oUnsaved.Remove(entry);
+                p2oRows.Remove(entry);
+                p2oStatusMessage = $"Removed pending row for package '{entry.PackageName}'.";
+                await p2oGrid.Reload();
+            }
+            else
+            {
+                await SqlDatabaseService.DeletePackageToObjectAsync(entry);
+                p2oStatusMessage = $"Deleted row for package '{entry.PackageName}'.";
+                await LoadP2OAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            p2oStatusMessage = $"Error deleting row: {ex.Message}";
+        }
+    }
+
+    private async Task ConfirmP2OTruncateAsync()
+    {
+        try
+        {
+            await SqlDatabaseService.TruncatePackageToObjectAsync();
+            p2oUnsaved.Clear();
+            p2oStatusMessage = "Successfully truncated all package-to-object rows.";
+            await LoadP2OAsync();
+        }
+        catch (Exception ex)
+        {
+            p2oStatusMessage = $"Error truncating: {ex.Message}";
+        }
+    }
+
+    private async Task SaveP2OManualEntriesAsync()
+    {
+        if (!p2oUnsaved.Any()) return;
+        try
+        {
+            var count = await SqlDatabaseService.InsertPackageToObjectsAsync(p2oUnsaved);
+            p2oStatusMessage = $"Saved {count} rows to the database.";
+            p2oUnsaved.Clear();
+            await LoadP2OAsync();
+        }
+        catch (Exception ex)
+        {
+            p2oStatusMessage = $"Error saving rows: {ex.Message}";
+        }
+    }
+
+    private async Task OnP2OCsvFileSelected(InputFileChangeEventArgs e)
+    {
+        if (e.File is null) return;
+        try
+        {
+            using var stream = e.File.OpenReadStream(maxAllowedSize: 5_000_000);
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+            var list = ParseP2OCsv(content);
+            if (list.Count > 0)
+            {
+                var count = await SqlDatabaseService.InsertPackageToObjectsAsync(list);
+                p2oStatusMessage = $"Imported {count} rows from CSV.";
+                await LoadP2OAsync();
+            }
+            else
+            {
+                p2oStatusMessage = "No valid records found in the CSV file.";
+            }
+        }
+        catch (Exception ex)
+        {
+            p2oStatusMessage = $"CSV import failed: {ex.Message}";
+        }
+    }
+
+    private List<AutoSysPackageToObject> ParseP2OCsv(string csvText)
+    {
+        var list = new List<AutoSysPackageToObject>();
+        var lines = csvText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var utcNow = DateTime.UtcNow;
+        bool isFirst = true;
+        foreach (var line in lines)
+        {
+            var parts = line.Split(',');
+            if (parts.Length < 6) continue;
+            string Clean(int i) => i < parts.Length ? parts[i].Trim().Trim('"') : string.Empty;
+            if (isFirst)
+            {
+                isFirst = false;
+                if (string.Equals(Clean(0), "PackageName", StringComparison.OrdinalIgnoreCase))
+                    continue;
+            }
+            list.Add(new AutoSysPackageToObject
+            {
+                PackageName = Clean(0),
+                DatabaseServer = Clean(1),
+                Database = Clean(2),
+                Schema = Clean(3),
+                ObjectName = Clean(4),
+                ObjectType = Clean(5),
+                ImportedAt = utcNow
+            });
+        }
+        return list;
+    }
+
+    private async Task ExportP2OToCsvAsync()
+    {
+        if (p2oRows == null || !p2oRows.Any())
+        {
+            p2oStatusMessage = "No rows available to export.";
+            return;
+        }
+        try
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("PackageName,database_server,database,schema,object_name,object_type,ImportedAt");
+            foreach (var r in p2oRows)
+            {
+                sb.AppendLine(string.Join(",", new[]
+                {
+                    EscapeCsvValue(r.PackageName ?? string.Empty),
+                    EscapeCsvValue(r.DatabaseServer ?? string.Empty),
+                    EscapeCsvValue(r.Database ?? string.Empty),
+                    EscapeCsvValue(r.Schema ?? string.Empty),
+                    EscapeCsvValue(r.ObjectName ?? string.Empty),
+                    EscapeCsvValue(r.ObjectType ?? string.Empty),
+                    r.ImportedAt.ToString("yyyy-MM-dd HH:mm:ss")
+                }));
+            }
+            var fileName = $"package_to_object_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+            await JSRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, sb.ToString());
+            p2oStatusMessage = $"Exported {p2oRows.Count} rows to {fileName}.";
+        }
+        catch (Exception ex)
+        {
+            p2oStatusMessage = $"Export failed: {ex.Message}";
+        }
+    }
+
+    private string GetP2OSaveButtonText()
+        => $"Save Manual Entries ({p2oUnsaved.Count})";
+
+    private bool IsP2OExportDisabled => p2oRows == null || !p2oRows.Any();
+
+    // ─── Runtime Jobs state ──────────────────────────────────────────────────
+
+    private List<AutoSysRuntimeJob> runtimeRows = new();
+    private List<AutoSysRuntimeJob> runtimeUnsaved = new();
+    private RadzenDataGrid<AutoSysRuntimeJob> runtimeGrid = default!;
+    private AutoSysRuntimeJob? runtimeRowToInsert;
+    private AutoSysRuntimeJob? runtimeRowToUpdate;
+    private string runtimeStatusMessage = string.Empty;
+
+    private async Task LoadRuntimeJobsAsync()
+    {
+        try
+        {
+            await SqlDatabaseService.CreateRuntimeJobsTableIfNotExistsAsync();
+            var list = await SqlDatabaseService.GetRuntimeJobsAsync();
+            runtimeRows = list.ToList();
+            if (runtimeUnsaved.Any())
+                runtimeRows.InsertRange(0, runtimeUnsaved);
+        }
+        catch (Exception ex)
+        {
+            runtimeStatusMessage = $"Error loading runtime job rows: {ex.Message}";
+        }
+    }
+
+    private void ResetRuntimeEdit()
+    {
+        runtimeRowToInsert = null;
+        runtimeRowToUpdate = null;
+    }
+
+    private async Task InsertRuntimeRow()
+    {
+        runtimeRowToInsert = new AutoSysRuntimeJob { InsertedAt = DateTime.UtcNow };
+        await runtimeGrid.InsertRow(runtimeRowToInsert);
+    }
+
+    private async Task OnRuntimeCreateRow(AutoSysRuntimeJob entry)
+    {
+        try
+        {
+            runtimeUnsaved.Add(entry);
+            if (!runtimeRows.Contains(entry))
+                runtimeRows.Insert(0, entry);
+            runtimeStatusMessage = $"Added row for job '{entry.JobName}'. Click 'Save Manual Entries' to persist.";
+            runtimeRowToInsert = null;
+            await runtimeGrid.Reload();
+        }
+        catch (Exception ex)
+        {
+            runtimeStatusMessage = $"Error adding row: {ex.Message}";
+            runtimeGrid.CancelEditRow(entry);
+            runtimeRowToInsert = null;
+        }
+    }
+
+    private async Task EditRuntimeRow(AutoSysRuntimeJob row)
+    {
+        if (runtimeRowToInsert != null)
+        {
+            runtimeGrid.CancelEditRow(runtimeRowToInsert);
+            runtimeRowToInsert = null;
+        }
+        runtimeRowToUpdate = row;
+        await runtimeGrid.EditRow(row);
+    }
+
+    private async Task OnRuntimeUpdateRow(AutoSysRuntimeJob entry)
+    {
+        try
+        {
+            bool isUnsaved = runtimeUnsaved.Any(r => r == entry);
+            if (!isUnsaved)
+            {
+                await SqlDatabaseService.UpdateRuntimeJobAsync(entry);
+                runtimeStatusMessage = $"Updated row for job '{entry.JobName}'.";
+            }
+            else
+            {
+                runtimeStatusMessage = $"Updated pending row for job '{entry.JobName}'.";
+            }
+            runtimeRowToUpdate = null;
+            await runtimeGrid.Reload();
+        }
+        catch (Exception ex)
+        {
+            runtimeStatusMessage = $"Error updating row: {ex.Message}";
+            runtimeGrid.CancelEditRow(entry);
+            runtimeRowToUpdate = null;
+        }
+    }
+
+    private async Task SaveRuntimeRow(AutoSysRuntimeJob entry)
+        => await runtimeGrid.UpdateRow(entry);
+
+    private void CancelRuntimeEdit(AutoSysRuntimeJob entry)
+    {
+        if (entry == runtimeRowToInsert)
+            runtimeRowToInsert = null;
+        else
+            runtimeRowToUpdate = null;
+        runtimeGrid.CancelEditRow(entry);
+    }
+
+    private async Task DeleteRuntimeRow(AutoSysRuntimeJob entry)
+    {
+        if (entry == runtimeRowToInsert)
+        {
+            runtimeRowToInsert = null;
+            runtimeGrid.CancelEditRow(entry);
+            return;
+        }
+        try
+        {
+            if (runtimeUnsaved.Any(r => r == entry))
+            {
+                runtimeUnsaved.Remove(entry);
+                runtimeRows.Remove(entry);
+                runtimeStatusMessage = $"Removed pending row for job '{entry.JobName}'.";
+                await runtimeGrid.Reload();
+            }
+            else
+            {
+                await SqlDatabaseService.DeleteRuntimeJobAsync(entry);
+                runtimeStatusMessage = $"Deleted row for job '{entry.JobName}'.";
+                await LoadRuntimeJobsAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            runtimeStatusMessage = $"Error deleting row: {ex.Message}";
+        }
+    }
+
+    private async Task ConfirmRuntimeTruncateAsync()
+    {
+        try
+        {
+            await SqlDatabaseService.TruncateRuntimeJobsAsync();
+            runtimeUnsaved.Clear();
+            runtimeStatusMessage = "Successfully truncated all runtime job rows.";
+            await LoadRuntimeJobsAsync();
+        }
+        catch (Exception ex)
+        {
+            runtimeStatusMessage = $"Error truncating: {ex.Message}";
+        }
+    }
+
+    private async Task SaveRuntimeManualEntriesAsync()
+    {
+        if (!runtimeUnsaved.Any()) return;
+        try
+        {
+            var count = await SqlDatabaseService.InsertRuntimeJobsAsync(runtimeUnsaved);
+            runtimeStatusMessage = $"Saved {count} rows to the database.";
+            runtimeUnsaved.Clear();
+            await LoadRuntimeJobsAsync();
+        }
+        catch (Exception ex)
+        {
+            runtimeStatusMessage = $"Error saving rows: {ex.Message}";
+        }
+    }
+
+    private async Task OnRuntimeCsvFileSelected(InputFileChangeEventArgs e)
+    {
+        if (e.File is null) return;
+        try
+        {
+            using var stream = e.File.OpenReadStream(maxAllowedSize: 5_000_000);
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+            var list = ParseRuntimeCsv(content);
+            if (list.Count > 0)
+            {
+                var count = await SqlDatabaseService.InsertRuntimeJobsAsync(list);
+                runtimeStatusMessage = $"Imported {count} rows from CSV.";
+                await LoadRuntimeJobsAsync();
+            }
+            else
+            {
+                runtimeStatusMessage = "No valid records found in the CSV file.";
+            }
+        }
+        catch (Exception ex)
+        {
+            runtimeStatusMessage = $"CSV import failed: {ex.Message}";
+        }
+    }
+
+    private List<AutoSysRuntimeJob> ParseRuntimeCsv(string csvText)
+    {
+        var list = new List<AutoSysRuntimeJob>();
+        var lines = csvText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var utcNow = DateTime.UtcNow;
+        bool isFirst = true;
+        foreach (var line in lines)
+        {
+            var parts = line.Split(',');
+            if (parts.Length < 3) continue;
+            string Clean(int i) => i < parts.Length ? parts[i].Trim().Trim('"') : string.Empty;
+            if (isFirst)
+            {
+                isFirst = false;
+                if (string.Equals(Clean(0), "JobName", StringComparison.OrdinalIgnoreCase))
+                    continue;
+            }
+
+            decimal? runTime = null;
+            if (decimal.TryParse(Clean(2), out var rt))
+            {
+                runTime = rt;
+            }
+
+            DateTime insertedAt = utcNow;
+            if (parts.Length >= 4 && DateTime.TryParse(Clean(3), out var dt))
+            {
+                insertedAt = dt;
+            }
+
+            list.Add(new AutoSysRuntimeJob
+            {
+                JobName = Clean(0),
+                JobStatus = Clean(1),
+                RunTimeInMinutes = runTime,
+                InsertedAt = insertedAt
+            });
+        }
+        return list;
+    }
+
+    private async Task ExportRuntimeToCsvAsync()
+    {
+        if (runtimeRows == null || !runtimeRows.Any())
+        {
+            runtimeStatusMessage = "No rows available to export.";
+            return;
+        }
+        try
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("JobName,JobStatus,RunTimeInMinutes,InsertedAt");
+            foreach (var r in runtimeRows)
+            {
+                sb.AppendLine(string.Join(",", new[]
+                {
+                    EscapeCsvValue(r.JobName ?? string.Empty),
+                    EscapeCsvValue(r.JobStatus ?? string.Empty),
+                    EscapeCsvValue(r.RunTimeInMinutes?.ToString() ?? string.Empty),
+                    r.InsertedAt.ToString("yyyy-MM-dd HH:mm:ss")
+                }));
+            }
+            var fileName = $"runtime_jobs_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+            await JSRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, sb.ToString());
+            runtimeStatusMessage = $"Exported {runtimeRows.Count} rows to {fileName}.";
+        }
+        catch (Exception ex)
+        {
+            runtimeStatusMessage = $"Export failed: {ex.Message}";
+        }
+    }
+
+    private string GetRuntimeSaveButtonText()
+        => $"Save Manual Entries ({runtimeUnsaved.Count})";
+
+    private bool IsRuntimeExportDisabled => runtimeRows == null || !runtimeRows.Any();
+}
+

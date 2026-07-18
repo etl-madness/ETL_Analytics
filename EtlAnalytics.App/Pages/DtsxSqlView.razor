@@ -1,0 +1,219 @@
+@page "/dtsx-sql-view"
+@using EtlAnalytics.App.Models
+@using EtlAnalytics.App.Services
+@inject SqlDatabaseService SqlDatabaseService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>DTSX SQL View</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4" Style="font-weight: 700; color: #0f172a; margin-bottom: 0.25rem;">DTSX SQL View</RadzenText>
+<RadzenText TextStyle="TextStyle.Subtitle1" Style="color: #64748b; margin-bottom: 1.5rem;">
+    Data from <code>dbo.DTSX_SQL_View</code>, based on the SQL examples in DTSXDataLoader/SQL_Examples.md.
+</RadzenText>
+
+<RadzenCard Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; background: #ffffff; margin-bottom: 1.25rem;">
+    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+        <RadzenButton Text="Load DTSX SQL View" Icon="refresh" ButtonStyle="ButtonStyle.Primary" Click="@LoadAsync" IsBusy="@isLoading" />
+        <RadzenButton Text="Export CSV" Icon="download" ButtonStyle="ButtonStyle.Info" Click="@ExportToCsvAsync" Disabled="@(!rows.Any())" />
+        <RadzenSplitButton Icon="visibility" Text="Columns" Click="@OnColumnButtonClick" ButtonStyle="ButtonStyle.Light">
+            <ChildContent>
+                <RadzenSplitButtonItem Text="Show All" Value="show-all" />
+                <RadzenSplitButtonItem Text="Hide All" Value="hide-all" />
+            </ChildContent>
+        </RadzenSplitButton>
+        <RadzenText TextStyle="TextStyle.Body2" Style="color: #64748b;">
+            Rows: @rows.Count
+        </RadzenText>
+    </div>
+</RadzenCard>
+
+@if (showColumnPickerDialog)
+{
+    <RadzenCard Style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; background: #ffffff; margin-bottom: 1rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+            <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600;">Select Columns to Display</RadzenText>
+            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => showColumnPickerDialog = false)" />
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem;">
+            @foreach (var column in columnVisibility)
+            {
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <RadzenCheckBox @bind-Value="columnVisibility[column.Key]" Name="@column.Key" />
+                    <RadzenLabel Text="@column.Key" Component="@column.Key" Style="margin: 0; cursor: pointer;" />
+                </div>
+            }
+        </div>
+    </RadzenCard>
+}
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Style="margin-bottom: 1rem;">
+        @statusMessage
+    </RadzenAlert>
+}
+
+@if (isLoading)
+{
+    <div style="display: flex; justify-content: center; padding: 3rem 0;">
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    </div>
+}
+else if (rows.Any())
+{
+    <RadzenDataGrid Data="@rows" TItem="DtsxSqlViewRow" AllowFiltering="true" AllowSorting="true" AllowPaging="true"
+                    PageSize="15" AllowColumnResize="true" Style="border: 1px solid #e2e8f0; border-radius: 8px;">
+        <Columns>
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="Id" Title="Id" Width="80px" Visible="@columnVisibility["Id"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="Package" Title="Package" Width="220px" Visible="@columnVisibility["Package"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="Pipeline" Title="Pipeline" Width="260px" Visible="@columnVisibility["Pipeline"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="Name" Title="Name" Width="200px" Visible="@columnVisibility["Name"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="ComponentType" Title="Component Type" Width="160px" Visible="@columnVisibility["Component Type"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="ConnectionName" Title="Connection Name" Width="180px" Visible="@columnVisibility["Connection Name"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="ConnectionType" Title="Connection Type" Width="160px" Visible="@columnVisibility["Connection Type"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="SqlSource" Title="SQL Source" Width="300px" Visible="@columnVisibility["SQL Source"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="ResolvedSql" Title="Resolved SQL" Width="300px" Visible="@columnVisibility["Resolved SQL"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="Description" Title="Description" Width="240px" Visible="@columnVisibility["Description"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="RefId" Title="RefId" Width="280px" Visible="@columnVisibility["RefId"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="ConnectionString" Title="Connection String" Width="280px" Visible="@columnVisibility["Connection String"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="ConnectionDtsId" Title="Connection DTS Id" Width="200px" Visible="@columnVisibility["Connection DTS Id"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="ConnectionRefId" Title="Connection RefId" Width="200px" Visible="@columnVisibility["Connection RefId"]" />
+            <RadzenDataGridColumn TItem="DtsxSqlViewRow" Property="LoadDate" Title="Load Date" Width="180px" Visible="@columnVisibility["Load Date"]">
+                <Template Context="row">
+                    @(row.LoadDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? string.Empty)
+                </Template>
+            </RadzenDataGridColumn>
+        </Columns>
+    </RadzenDataGrid>
+}
+
+@code {
+    private List<DtsxSqlViewRow> rows = new();
+    private bool isLoading;
+    private string statusMessage = string.Empty;
+    private bool showColumnPickerDialog;
+    private Dictionary<string, bool> columnVisibility = new()
+    {
+        ["Id"] = true,
+        ["Package"] = true,
+        ["Pipeline"] = true,
+        ["Name"] = true,
+        ["Component Type"] = true,
+        ["Connection Name"] = true,
+        ["Connection Type"] = true,
+        ["SQL Source"] = true,
+        ["Resolved SQL"] = true,
+        ["Description"] = true,
+        ["RefId"] = true,
+        ["Connection String"] = true,
+        ["Connection DTS Id"] = true,
+        ["Connection RefId"] = true,
+        ["Load Date"] = true
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        statusMessage = string.Empty;
+
+        try
+        {
+            rows = (await SqlDatabaseService.GetDtsxSqlViewRowsAsync()).ToList();
+            statusMessage = $"Loaded {rows.Count} row(s) from dbo.DTSX_SQL_View.";
+        }
+        catch (Exception ex)
+        {
+            rows.Clear();
+            statusMessage = $"Failed to load DTSX_SQL_View: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OnColumnButtonClick(RadzenSplitButtonItem item)
+    {
+        if (item?.Value is string value)
+        {
+            if (value == "show-all")
+            {
+                foreach (var key in columnVisibility.Keys.ToList())
+                {
+                    columnVisibility[key] = true;
+                }
+            }
+            else if (value == "hide-all")
+            {
+                foreach (var key in columnVisibility.Keys.ToList())
+                {
+                    columnVisibility[key] = false;
+                }
+            }
+
+            return;
+        }
+
+        showColumnPickerDialog = !showColumnPickerDialog;
+    }
+
+    private async Task ExportToCsvAsync()
+    {
+        if (!rows.Any())
+        {
+            statusMessage = "No rows available to export.";
+            return;
+        }
+
+        var csv = BuildCsv(rows);
+        var fileName = $"dtsx-sql-view-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv";
+        await JSRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, csv);
+        statusMessage = $"Exported {rows.Count} row(s) to {fileName}.";
+    }
+
+    private static string BuildCsv(IEnumerable<DtsxSqlViewRow> sourceRows)
+    {
+        var lines = new List<string>
+        {
+            "Id,Package,Pipeline,Name,ComponentType,ConnectionName,ConnectionType,SqlSource,ResolvedSql,Description,RefId,ConnectionString,ConnectionDtsId,ConnectionRefId,LoadDate"
+        };
+
+        foreach (var row in sourceRows)
+        {
+            lines.Add(string.Join(",",
+                CsvEscape(row.Id.ToString()),
+                CsvEscape(row.Package),
+                CsvEscape(row.Pipeline),
+                CsvEscape(row.Name),
+                CsvEscape(row.ComponentType),
+                CsvEscape(row.ConnectionName),
+                CsvEscape(row.ConnectionType),
+                CsvEscape(row.SqlSource),
+                CsvEscape(row.ResolvedSql),
+                CsvEscape(row.Description),
+                CsvEscape(row.RefId),
+                CsvEscape(row.ConnectionString),
+                CsvEscape(row.ConnectionDtsId),
+                CsvEscape(row.ConnectionRefId),
+                CsvEscape(row.LoadDate?.ToString("yyyy-MM-dd HH:mm:ss"))));
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string CsvEscape(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return "";
+        }
+
+        var escaped = value.Replace("\"", "\"\"");
+        return $"\"{escaped}\"";
+    }
+}

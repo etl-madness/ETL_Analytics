@@ -1,0 +1,277 @@
+@page "/business-rules"
+@using EtlAnalytics.App.Models
+@using EtlAnalytics.App.Services
+@using System.Text.Json
+@using System.Text.Encodings.Web
+@inject SqlDatabaseService DbService
+@inject BusinessRuleEngine<BusinessRuleContext> Engine
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Business Rule IDE</PageTitle>
+
+<div style="display: flex; height: calc(100vh - 120px); border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; overflow: hidden;">
+    <!-- Sidebar: Rule List -->
+    <div style="width: 300px; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; background: #f8fafc;">
+        <div style="padding: 1rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #ffffff;">
+            <RadzenText TextStyle="TextStyle.Subtitle1" Style="font-weight: 700; margin: 0; color: #0f172a;">Rules</RadzenText>
+            <div style="display: flex; gap: 0.5rem;">
+                <RadzenButton Icon="refresh" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="LoadRulesAsync" Tooltip="Refresh List" />
+                <RadzenButton Icon="add" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="CreateNewRule" Tooltip="Create New Rule" />
+            </div>
+        </div>
+        <div style="flex-grow: 1; overflow-y: auto; padding: 0.5rem;">
+            @if (!rules.Any())
+            {
+                <div style="padding: 1rem; color: #64748b; font-size: 0.9rem; text-align: center;">No rules found.</div>
+            }
+            @foreach (var rule in rules)
+            {
+                <div @onclick="() => SelectRule(rule)" 
+                     style="padding: 0.75rem 1rem; margin-bottom: 0.25rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; 
+                            background: @(selectedRule?.Id == rule.Id ? "#eff6ff" : "transparent");
+                            border: 1px solid @(selectedRule?.Id == rule.Id ? "#bfdbfe" : "transparent");">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <span style="font-weight: 600; color: #1e293b; font-size: 0.9rem;">@rule.Name</span>
+                        <RadzenBadge BadgeStyle="@(rule.RuleType == RuleType.TSQL ? BadgeStyle.Info : BadgeStyle.Warning)" 
+                                     Text="@rule.RuleType.ToString()" 
+                                     Style="font-size: 0.65rem; padding: 0.1rem 0.4rem;" />
+                    </div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        v@rule.Version • @rule.UpdatedAt.ToString("MMM dd, HH:mm")
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Main Content: Editor & Runner -->
+    <div style="flex-grow: 1; display: flex; flex-direction: column; background: #ffffff;">
+        @if (selectedRule == null)
+        {
+            <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8;">
+                <span class="rzi" style="font-size: 4rem; margin-bottom: 1rem;">description</span>
+                <RadzenText TextStyle="TextStyle.H6" Style="color: #94a3b8;">Select a rule to view or edit</RadzenText>
+            </div>
+        }
+        else
+        {
+            <!-- Toolbar -->
+            <div style="padding: 0.75rem 1.5rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <RadzenText TextStyle="TextStyle.H6" Style="font-weight: 700; margin: 0; color: #0f172a;">@selectedRule.Name</RadzenText>
+                    <RadzenBadge BadgeStyle="BadgeStyle.Secondary" Text="@($"v{selectedRule.Version}")" />
+                </div>
+                <div style="display: flex; gap: 0.75rem; align-items: center;">
+                    <RadzenButton Text="Run Execution" Icon="play_arrow" ButtonStyle="ButtonStyle.Success" Click="RunRule" IsBusy="@isRunning" />
+                    <RadzenButton Text="Save Changes" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="SaveCurrentRule" IsBusy="@isSaving" />
+                    <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="() => ConfirmDeleteAsync(selectedRule)" Variant="Variant.Flat" />
+                </div>
+            </div>
+
+            <!-- Content Splitter -->
+            <div style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden;">
+                <!-- Editor -->
+                <div style="flex: 1; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                    <RadzenRow Gap="1rem">
+                        <RadzenColumn Size="4">
+                            <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.25rem;">Rule Name</RadzenText>
+                            <RadzenTextBox @bind-Value="selectedRule.Name" Style="width: 100%;" />
+                        </RadzenColumn>
+                        <RadzenColumn Size="5">
+                            <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.25rem;">Description</RadzenText>
+                            <RadzenTextBox @bind-Value="selectedRule.Description" Style="width: 100%;" />
+                        </RadzenColumn>
+                        <RadzenColumn Size="3">
+                            <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.25rem;">Type</RadzenText>
+                            <RadzenDropDown @bind-Value="selectedRule.RuleType" Data="@ruleTypes" Style="width: 100%;" />
+                        </RadzenColumn>
+                    </RadzenRow>
+                    <div style="flex-grow: 1; display: flex; flex-direction: column;">
+                        <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.25rem;">Source Code</RadzenText>
+                        <RadzenTextArea @bind-Value="selectedRule.Code" 
+                                        Style="flex-grow: 1; font-family: Consolas, monospace; background: #0f172a; color: #f8fafc; border-radius: 6px; padding: 1rem;" />
+                    </div>
+                </div>
+
+                <!-- Watch Panel (Footer-style Sidebar) -->
+                <div style="height: 250px; border-top: 1px solid #e2e8f0; background: #0b1220; color: #e2e8f0; display: flex; flex-direction: column;">
+                    <div style="padding: 0.5rem 1rem; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center;">
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: #94a3b8; font-weight: 700; text-transform: uppercase;">Execution Watch</RadzenText>
+                        <RadzenButton Icon="clear_all" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="() => logs.Clear()" Variant="Variant.Text" />
+                    </div>
+                    <div style="flex-grow: 1; display: flex; overflow: hidden;">
+                        <!-- Logs -->
+                        <div id="rule-ide-log" style="flex: 1; padding: 0.75rem; overflow-y: auto; font-family: Consolas, monospace; font-size: 0.8rem; border-right: 1px solid #1e293b;">
+                            @if (!logs.Any())
+                            {
+                                <div style="color: #475569;">No execution history for this session.</div>
+                            }
+                            @foreach (var log in logs)
+                            {
+                                <div style="margin-bottom: 0.15rem;">@log</div>
+                            }
+                        </div>
+                        <!-- Result Preview -->
+                        <div style="width: 350px; padding: 0.75rem; overflow-y: auto; background: #0f172a;">
+                            <RadzenText TextStyle="TextStyle.Caption" Style="color: #64748b; font-weight: 700; margin-bottom: 0.5rem; display: block;">Result Object</RadzenText>
+                            @if (result != null)
+                            {
+                                <pre style="font-size: 0.75rem; color: #38bdf8; margin: 0; white-space: pre-wrap;">@JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping })</pre>
+                            }
+                            else
+                            {
+                                <div style="color: #475569; font-size: 0.75rem;">Run execution to see result.</div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<BusinessRule> rules = new();
+    private BusinessRule? selectedRule;
+    private List<RuleType> ruleTypes = Enum.GetValues<RuleType>().ToList();
+    
+    private bool isSaving;
+    private bool isRunning;
+    private List<string> logs = new();
+    private object? result;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await DbService.CreateBusinessRuleTablesIfNotExistsAsync();
+        await LoadRulesAsync();
+    }
+
+    private async Task LoadRulesAsync()
+    {
+        rules = (await DbService.GetBusinessRulesAsync()).ToList();
+    }
+
+    private void SelectRule(BusinessRule rule)
+    {
+        selectedRule = new BusinessRule 
+        { 
+            Id = rule.Id,
+            Name = rule.Name,
+            Description = rule.Description,
+            RuleType = rule.RuleType,
+            Code = rule.Code,
+            Version = rule.Version,
+            IsActive = rule.IsActive,
+            CreatedAt = rule.CreatedAt,
+            UpdatedAt = rule.UpdatedAt
+        };
+        result = null;
+        // Keep logs across rule selections? Usually better to clear or keep track per rule.
+    }
+
+    private void CreateNewRule()
+    {
+        selectedRule = new BusinessRule { Name = "New Business Rule", RuleType = RuleType.TSQL };
+        result = null;
+        logs.Clear();
+    }
+
+    private async Task SaveCurrentRule()
+    {
+        if (selectedRule == null || string.IsNullOrWhiteSpace(selectedRule.Name) || string.IsNullOrWhiteSpace(selectedRule.Code))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validation Error", "Name and Code are required.");
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            if (selectedRule.Id == 0)
+            {
+                var id = await DbService.InsertBusinessRuleAsync(selectedRule);
+                selectedRule.Id = id;
+                NotificationService.Notify(NotificationSeverity.Success, "Created", "Rule created successfully.");
+            }
+            else
+            {
+                await DbService.UpdateBusinessRuleAsync(selectedRule);
+                NotificationService.Notify(NotificationSeverity.Success, "Updated", "Rule saved and versioned.");
+            }
+            await LoadRulesAsync();
+            // Refresh local selected rule to get updated version/timestamp
+            var updated = await DbService.GetBusinessRuleByIdAsync(selectedRule.Id);
+            if (updated != null) SelectRule(updated);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task RunRule()
+    {
+        if (selectedRule == null) return;
+
+        isRunning = true;
+        result = null;
+        logs.Add($"[{DateTime.Now:HH:mm:ss}] --- Starting Execution ---");
+        StateHasChanged();
+
+        try
+        {
+            var importTimes = await DbService.GetImportTimesAsync();
+            var jobs = importTimes.Any() ? await DbService.QueryJobsByImportTimeAsync(importTimes[0]) : new List<JilJob>();
+            var mappings = await DbService.GetJobToPackagesAsync();
+            
+            var context = new BusinessRuleContext
+            {
+                Jobs = jobs.ToList(),
+                JobToPackageMappings = mappings.ToList(),
+                Log = line => {
+                     _ = InvokeAsync(() => {
+                        logs.Add($"[{DateTime.Now:HH:mm:ss}] {line}");
+                        StateHasChanged();
+                        _ = JSRuntime.InvokeVoidAsync("scrollDtsxLoaderLogToBottom", "rule-ide-log");
+                    });
+                }
+            };
+
+            var executionResult = await Engine.ExecuteRuleAsync(selectedRule, context, line => {
+                _ = InvokeAsync(() => {
+                    logs.Add($"[{DateTime.Now:HH:mm:ss}] {line}");
+                    StateHasChanged();
+                    _ = JSRuntime.InvokeVoidAsync("scrollDtsxLoaderLogToBottom", "rule-ide-log");
+                });
+            });
+            result = executionResult;
+            logs.Add($"[{DateTime.Now:HH:mm:ss}] --- Execution Finished ---");
+        }
+        catch (Exception ex)
+        {
+            logs.Add($"[{DateTime.Now:HH:mm:ss}] [FATAL] {ex.Message}");
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+
+    private async Task ConfirmDeleteAsync(BusinessRule rule)
+    {
+        var confirm = await DialogService.Confirm($"Are you sure you want to delete the rule '{rule.Name}'?", "Delete Confirmation");
+        if (confirm == true)
+        {
+            await DbService.DeleteBusinessRuleAsync(rule.Id);
+            selectedRule = null;
+            await LoadRulesAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Deleted", "Business rule deleted.");
+        }
+    }
+}
