@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AutoSysJilBlazor\AutoSysJilBlazor.csproj" />
+    <ProjectReference Include="..\EtlAnalytics.RulesEngine\EtlAnalytics.RulesEngine.csproj" />
   </ItemGroup>
 
 </Project>

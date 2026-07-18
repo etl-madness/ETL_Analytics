@@ -1,3 +1,4 @@
+using EtlAnalytics.RulesEngine.Models;
 using AutoSysJilBlazor.Models;
 
 namespace AutoSysJilBlazor.Services;

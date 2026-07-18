@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutoSysJilBlazor", "AutoSys
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutoSysJilBlazor.Tests", "AutoSysJilBlazor.Tests\AutoSysJilBlazor.Tests.csproj", "{EE13C07D-D5FD-4256-A62B-05098A393D61}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EtlAnalytics.RulesEngine", "EtlAnalytics.RulesEngine\EtlAnalytics.RulesEngine.csproj", "{F25A36AA-737C-413D-B902-00E73943DD1E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -56,6 +58,24 @@ Global
 		{EE13C07D-D5FD-4256-A62B-05098A393D61}.Release|x64.Build.0 = Release|Any CPU
 		{EE13C07D-D5FD-4256-A62B-05098A393D61}.Release|x86.ActiveCfg = Release|Any CPU
 		{EE13C07D-D5FD-4256-A62B-05098A393D61}.Release|x86.Build.0 = Release|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Debug|x64.Build.0 = Debug|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Debug|x86.Build.0 = Debug|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Development|Any CPU.ActiveCfg = Debug|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Development|Any CPU.Build.0 = Debug|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Development|x64.ActiveCfg = Debug|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Development|x64.Build.0 = Debug|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Development|x86.ActiveCfg = Debug|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Development|x86.Build.0 = Debug|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Release|x64.ActiveCfg = Release|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Release|x64.Build.0 = Release|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Release|x86.ActiveCfg = Release|Any CPU
+		{F25A36AA-737C-413D-B902-00E73943DD1E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

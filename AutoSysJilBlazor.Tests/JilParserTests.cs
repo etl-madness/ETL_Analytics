@@ -1,5 +1,6 @@
-using AutoSysJilBlazor.Models;
 using AutoSysJilBlazor.Services;
+using AutoSysJilBlazor.Models;
+using EtlAnalytics.RulesEngine.Models;
 using NUnit.Framework;
 
 namespace AutoSysJilBlazor.Tests

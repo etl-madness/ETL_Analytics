@@ -1,4 +1,4 @@
-namespace AutoSysJilBlazor.Models;
+namespace EtlAnalytics.RulesEngine.Models;
 
 public enum RuleType
 {

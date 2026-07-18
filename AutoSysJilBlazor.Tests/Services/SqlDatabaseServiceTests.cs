@@ -1,4 +1,5 @@
 using AutoSysJilBlazor.Services;
+using EtlAnalytics.RulesEngine.Models;
 using Microsoft.Extensions.Configuration;
 
 namespace AutoSysJilBlazor.Tests.Services;

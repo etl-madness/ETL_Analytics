@@ -1,4 +1,4 @@
-namespace AutoSysJilBlazor.Models;
+namespace EtlAnalytics.RulesEngine.Models;
 
 public class BusinessRuleBundleItem
 {
@@ -7,7 +7,7 @@ public class BusinessRuleBundleItem
     public int RuleId { get; set; }
     public int SequenceOrder { get; set; }
     
-    // Joined data for UI
-    public string RuleName { get; set; } = string.Empty;
-    public RuleType RuleType { get; set; }
+    // UI Helpers
+    public string? RuleName { get; set; }
+    public RuleType? RuleType { get; set; }
 }

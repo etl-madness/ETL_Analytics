@@ -1,8 +1,33 @@
-using AutoSysJilBlazor.Models;
 using AutoSysJilBlazor.Services;
+using AutoSysJilBlazor.Models;
+using EtlAnalytics.RulesEngine.Models;
+using EtlAnalytics.RulesEngine.Services;
+using EtlAnalytics.RulesEngine.Interfaces;
+using EtlAnalytics.RulesEngine.Providers;
 using Microsoft.Extensions.Configuration;
+using NUnit.Framework;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using System;
 
 namespace AutoSysJilBlazor.Tests.Services;
+
+public class TestRuleStore : IBusinessRuleStore
+{
+    public Dictionary<int, BusinessRule> Rules { get; set; } = new();
+    public Dictionary<string, BusinessRuleBundle> Bundles { get; set; } = new();
+
+    public Task<BusinessRule?> GetBusinessRuleByIdAsync(int id)
+    {
+        return Task.FromResult(Rules.TryGetValue(id, out var rule) ? rule : null);
+    }
+
+    public Task<BusinessRuleBundle?> GetBusinessRuleBundleByNameAsync(string name)
+    {
+        return Task.FromResult(Bundles.TryGetValue(name, out var bundle) ? bundle : null);
+    }
+}
 
 [TestFixture]
 public class BusinessRuleEngineTests
@@ -17,7 +42,7 @@ public class BusinessRuleEngineTests
         {
             Environment.SetEnvironmentVariable("DB_CONNECTION_STRING", null);
 
-            Assert.Throws<InvalidOperationException>(() => _ = new BusinessRuleEngine(CreateConfiguration()));
+            Assert.Throws<InvalidOperationException>(() => _ = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), new TestRuleStore(), new SqlServerRuleDbProvider()));
         }
         finally
         {
@@ -32,7 +57,7 @@ public class BusinessRuleEngineTests
         try
         {
             Environment.SetEnvironmentVariable("DB_CONNECTION_STRING", "Server=(local);Database=master;Trusted_Connection=True;");
-            var engine = new BusinessRuleEngine(CreateConfiguration());
+            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), new TestRuleStore(), new SqlServerRuleDbProvider());
 
             var rule = new BusinessRule
             {
@@ -70,7 +95,7 @@ public class BusinessRuleEngineTests
         try
         {
             Environment.SetEnvironmentVariable("DB_CONNECTION_STRING", "Server=(local);Database=master;Trusted_Connection=True;");
-            var engine = new BusinessRuleEngine(CreateConfiguration());
+            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), new TestRuleStore(), new SqlServerRuleDbProvider());
 
             var rule = new BusinessRule
             {
@@ -97,7 +122,12 @@ public class BusinessRuleEngineTests
         try
         {
             Environment.SetEnvironmentVariable("DB_CONNECTION_STRING", "Server=(local);Database=master;Trusted_Connection=True;");
-            var engine = new BusinessRuleEngine(CreateConfiguration());
+            
+            var store = new TestRuleStore();
+            store.Rules[1] = new() { Id = 1, Name = "Seed", RuleType = RuleType.CSharp, Code = "1" };
+            store.Rules[2] = new() { Id = 2, Name = "Increment", RuleType = RuleType.CSharp, Code = "(int)PreviousResult + 1" };
+
+            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), store, new SqlServerRuleDbProvider());
 
             var bundle = new BusinessRuleBundle
             {
@@ -109,14 +139,8 @@ public class BusinessRuleEngineTests
                 }
             };
 
-            var rules = new Dictionary<int, BusinessRule>
-            {
-                [1] = new() { Id = 1, Name = "Seed", RuleType = RuleType.CSharp, Code = "1" },
-                [2] = new() { Id = 2, Name = "Increment", RuleType = RuleType.CSharp, Code = "(int)PreviousResult + 1" }
-            };
-
             var context = new BusinessRuleContext();
-            var result = await engine.ExecuteBundleAsync(bundle, context, id => Task.FromResult(rules.TryGetValue(id, out var rule) ? rule : null));
+            var result = await engine.ExecuteBundleAsync(bundle, context);
 
             Assert.That(result, Is.EqualTo(2));
             Assert.That(context.StepResults[1], Is.EqualTo(1));
@@ -135,7 +159,12 @@ public class BusinessRuleEngineTests
         try
         {
             Environment.SetEnvironmentVariable("DB_CONNECTION_STRING", "Server=(local);Database=master;Trusted_Connection=True;");
-            var engine = new BusinessRuleEngine(CreateConfiguration());
+            
+            var store = new TestRuleStore();
+            store.Rules[1] = new() { Id = 1, Name = "Seed", RuleType = RuleType.CSharp, Code = "1" };
+            store.Rules[2] = new() { Id = 2, Name = "Increment", RuleType = RuleType.CSharp, Code = "(int)PreviousResult + 1" };
+
+            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), store, new SqlServerRuleDbProvider());
 
             var bundle = new BusinessRuleBundle
             {
@@ -148,15 +177,9 @@ public class BusinessRuleEngineTests
                 }
             };
 
-            var rules = new Dictionary<int, BusinessRule>
-            {
-                [1] = new() { Id = 1, Name = "Seed", RuleType = RuleType.CSharp, Code = "1" },
-                [2] = new() { Id = 2, Name = "Increment", RuleType = RuleType.CSharp, Code = "(int)PreviousResult + 1" }
-            };
-
             var logs = new List<string>();
             var context = new BusinessRuleContext();
-            var result = await engine.ExecuteBundleAsync(bundle, context, id => Task.FromResult(rules.TryGetValue(id, out var rule) ? rule : null), logs.Add);
+            var result = await engine.ExecuteBundleAsync(bundle, context, logs.Add);
 
             Assert.That(result, Is.EqualTo(2));
             Assert.That(logs.Any(x => x.Contains("Rule ID 999 not found. Skipping.", StringComparison.Ordinal)), Is.True);

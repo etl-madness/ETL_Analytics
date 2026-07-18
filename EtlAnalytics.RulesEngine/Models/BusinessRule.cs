@@ -1,4 +1,6 @@
-namespace AutoSysJilBlazor.Models;
+using System;
+
+namespace EtlAnalytics.RulesEngine.Models;
 
 public class BusinessRule
 {
@@ -7,8 +9,8 @@ public class BusinessRule
     public string Description { get; set; } = string.Empty;
     public RuleType RuleType { get; set; }
     public string Code { get; set; } = string.Empty;
-    public int Version { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
+    public int Version { get; set; } = 1;
     public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime UpdatedAt { get; set; } = DateTime.Now;
 }

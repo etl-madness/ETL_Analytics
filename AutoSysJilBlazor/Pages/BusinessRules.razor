@@ -4,7 +4,7 @@
 @using System.Text.Json
 @using System.Text.Encodings.Web
 @inject SqlDatabaseService DbService
-@inject BusinessRuleEngine Engine
+@inject BusinessRuleEngine<BusinessRuleContext> Engine
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 @inject IJSRuntime JSRuntime

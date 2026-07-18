@@ -1,4 +1,5 @@
 using AutoSysJilBlazor.Models;
+using EtlAnalytics.RulesEngine.Models;
 
 namespace AutoSysJilBlazor.Tests.Models;
 
@@ -8,11 +9,15 @@ public class ModelCoverageTests
     [Test]
     public void AllModelClasses_HaveParameterlessConstructor_AndCanBeInstantiated()
     {
-        var modelTypes = typeof(JilJob).Assembly
+        var blazorModels = typeof(DtsxLoaderSettings).Assembly
             .GetTypes()
-            .Where(t => t.IsClass && t.Namespace == "AutoSysJilBlazor.Models" && !t.IsAbstract)
-            .OrderBy(t => t.Name)
-            .ToList();
+            .Where(t => t.IsClass && t.Namespace == "AutoSysJilBlazor.Models" && !t.IsAbstract);
+
+        var libraryModels = typeof(JilJob).Assembly
+            .GetTypes()
+            .Where(t => t.IsClass && t.Namespace == "EtlAnalytics.RulesEngine.Models" && !t.IsAbstract);
+
+        var modelTypes = blazorModels.Concat(libraryModels).ToList();
 
         Assert.That(modelTypes, Is.Not.Empty);
 

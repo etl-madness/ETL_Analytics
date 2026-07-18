@@ -3,6 +3,10 @@ using Microsoft.AspNetCore.Components.Web;
 using AutoSysJilBlazor.Data;
 using AutoSysJilBlazor.Services;
 using Radzen;
+using EtlAnalytics.RulesEngine.Services;
+using EtlAnalytics.RulesEngine.Interfaces;
+using EtlAnalytics.RulesEngine.Providers;
+using AutoSysJilBlazor.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,9 +19,11 @@ builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<TooltipService>();
 builder.Services.AddScoped<ContextMenuService>();
 builder.Services.AddScoped<SqlDatabaseService>();
+builder.Services.AddScoped<IBusinessRuleStore>(sp => sp.GetRequiredService<SqlDatabaseService>());
+builder.Services.AddScoped<IRuleDbProvider, SqlServerRuleDbProvider>();
 builder.Services.AddScoped<DtsxLoaderSettingsService>();
 builder.Services.AddScoped<DtsxLoaderExecutionService>();
-builder.Services.AddScoped<BusinessRuleEngine>();
+builder.Services.AddScoped<BusinessRuleEngine<BusinessRuleContext>>();
 
 var app = builder.Build();
 

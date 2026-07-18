@@ -1,3 +1,5 @@
+using EtlAnalytics.RulesEngine.Models;
+using EtlAnalytics.RulesEngine.Interfaces;
 using AutoSysJilBlazor.Models;
 using Dapper;
 using Microsoft.Data.SqlClient;
@@ -5,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace AutoSysJilBlazor.Services;
 
-public class SqlDatabaseService
+public class SqlDatabaseService : IBusinessRuleStore
 {
     static SqlDatabaseService()
     {
