@@ -10,6 +10,7 @@ public class BusinessRule
     public RuleType RuleType { get; set; }
     public string Code { get; set; } = string.Empty;
     public int Version { get; set; } = 1;
+    public int? ConnectionId { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;

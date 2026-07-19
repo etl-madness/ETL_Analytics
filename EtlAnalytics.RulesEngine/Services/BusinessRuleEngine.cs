@@ -7,6 +7,7 @@ using EtlAnalytics.RulesEngine.Interfaces;
 using System.Text.Json;
 using System.Text.Encodings.Web;
 using Microsoft.Extensions.Configuration;
+using System.Linq;
 
 namespace EtlAnalytics.RulesEngine.Services;
 
@@ -14,15 +15,24 @@ public class BusinessRuleEngine<TContext> where TContext : RuleExecutionContext
 {
     private readonly string _connectionString;
     private readonly IBusinessRuleStore _ruleStore;
-    private readonly IRuleDbProvider _dbProvider;
+    private readonly IEnumerable<IRuleDbProvider> _dbProviders;
+    private readonly IRuleDbProvider _defaultProvider;
 
-    public BusinessRuleEngine(IConfiguration configuration, IBusinessRuleStore ruleStore, IRuleDbProvider dbProvider)
+    public BusinessRuleEngine(IConfiguration configuration, IBusinessRuleStore ruleStore, IEnumerable<IRuleDbProvider> dbProviders)
     {
         _connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
             ?? configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
         _ruleStore = ruleStore;
-        _dbProvider = dbProvider;
+        _dbProviders = dbProviders;
+        _defaultProvider = dbProviders.FirstOrDefault() 
+            ?? throw new InvalidOperationException("No IRuleDbProvider registered. Please register at least one implementation of IRuleDbProvider.");
+    }
+
+    private IRuleDbProvider GetProvider(string providerType)
+    {
+        return _dbProviders.FirstOrDefault(p => p.ProviderType.Equals(providerType, StringComparison.OrdinalIgnoreCase))
+            ?? _defaultProvider;
     }
 
     public async Task<object?> ExecuteRuleAsync(
@@ -51,7 +61,7 @@ public class BusinessRuleEngine<TContext> where TContext : RuleExecutionContext
         {
             if (rule.RuleType == RuleType.TSQL)
             {
-                return await ExecuteTsqlAsync(rule.Code, globals, appendLog);
+                return await ExecuteTsqlAsync(rule, globals, appendLog);
             }
             else if (rule.RuleType == RuleType.CSharp)
             {
@@ -108,10 +118,28 @@ public class BusinessRuleEngine<TContext> where TContext : RuleExecutionContext
         return lastResult;
     }
 
-    private async Task<object?> ExecuteTsqlAsync(string code, TContext? context, Action<string>? appendLog)
+    private async Task<object?> ExecuteTsqlAsync(BusinessRule rule, TContext? context, Action<string>? appendLog)
     {
+        string connectionString = _connectionString;
+        IRuleDbProvider provider = _defaultProvider;
+
+        if (rule.ConnectionId.HasValue)
+        {
+            var dbConn = await _ruleStore.GetDbConnectionByIdAsync(rule.ConnectionId.Value);
+            if (dbConn != null)
+            {
+                appendLog?.Invoke($"[SQL] Using specific connection: {dbConn.Name} ({dbConn.ProviderType})");
+                connectionString = dbConn.ConnectionString;
+                provider = GetProvider(dbConn.ProviderType);
+            }
+            else
+            {
+                appendLog?.Invoke($"[WARN] Connection ID {rule.ConnectionId} not found. Falling back to default connection.");
+            }
+        }
+
         appendLog?.Invoke("[SQL] Executing T-SQL script...");
-        using var connection = _dbProvider.CreateConnection(_connectionString);
+        using var connection = provider.CreateConnection(connectionString);
         
         var parameters = new DynamicParameters();
         var jsonOptions = new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
@@ -122,7 +150,7 @@ public class BusinessRuleEngine<TContext> where TContext : RuleExecutionContext
         parameters.Add("PreviousResultJson", previousJson);
         parameters.Add("StepResultsJson", stepResultsJson);
 
-        var results = await connection.QueryAsync<dynamic>(code, parameters);
+        var results = await connection.QueryAsync<dynamic>(rule.Code, parameters);
         var resultList = results.ToList();
         
         appendLog?.Invoke($"[SQL] Execution completed. {resultList.Count} rows returned.");

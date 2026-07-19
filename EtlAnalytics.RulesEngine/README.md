@@ -56,10 +56,60 @@ public class MySqlRuleDbProvider : IRuleDbProvider
 }
 ```
 
-### 2. Registering in your Application
-```csharp
-// Register the provider for your specific database
+builder.Services.AddScoped<IRuleDbProvider, SqlServerRuleDbProvider>();
 builder.Services.AddScoped<IRuleDbProvider, PostgresRuleDbProvider>();
+// The engine will automatically pick the right one based on the Connection definition!
+```
+
+---
+
+## 🔗 Multi-Database Rulesets (Cross-Database Logic)
+
+You can now configure individual rules within a bundle to run against different databases. This is perfect for auditing across multiple systems or consolidating data from disparate sources.
+
+### 1. Define your Connections
+First, store your connection strings in the `DbConnections` table. 
+
+> [!NOTE]
+> Connection strings are stored **encrypted** (AES-256) in the database.
+
+| Id | Name | ConnectionString (Encrypted) | ProviderType |
+| :--- | :--- | :--- | :--- |
+| 1 | ProductionDB | `uP6+...[Base64 Encrypted Blob]...` | `SqlServer` |
+| 2 | AuditDB | `vA2x...[Base64 Encrypted Blob]...` | `SqlServer` |
+
+### 2. Link Rules to Connections
+When creating a rule, specify the `ConnectionId`:
+
+```sql
+-- Rule: "Audit Order" (ConnectionId: 2)
+INSERT INTO dbo.OrderAudit (OrderId, Status)
+SELECT OrderId, 'Processed' FROM OPENJSON(@PreviousResultJson) WITH (OrderId INT '$')
+```
+
+The engine will automatically switch to the **AuditDB** connection for this specific step!
+
+---
+
+## 🔒 Security & Encryption
+
+Database connection strings are sensitive data. The library includes built-in support for **AES-256 Encryption** to protect these strings at rest in your database.
+
+### 1. How it Works
+The `SqlDatabaseService` uses an `IEncryptionService` to automatically:
+*   **Encrypt** strings when saving to the `DbConnections` table.
+*   **Decrypt** strings when retrieving them for the `BusinessRuleEngine`.
+
+### 2. Key Configuration
+You must provide an encryption key for the AES algorithm. The `AesEncryptionService` resolves the key in this order:
+1.  **`DB_ENCRYPTION_KEY`** (Environment Variable) - *Recommended for production*.
+2.  **`Security:EncryptionKey`** (AppSettings.json).
+3.  Internal default (Not recommended for production).
+
+### 3. Setup in Program.cs
+```csharp
+// Register the encryption service as a singleton
+builder.Services.AddSingleton<IEncryptionService, AesEncryptionService>();
 ```
 
 ---
@@ -135,13 +185,28 @@ The engine needs to find your rules in a database. Here is the recommended SQL s
 
 #### **SQL Server Schema**
 ```sql
+DROP TABLE IF EXISTS dbo.BusinessRuleBundleItems;
+DROP TABLE IF EXISTS dbo.BusinessRuleBundles;
+DROP TABLE IF EXISTS dbo.BusinessRules;
+DROP TABLE IF EXISTS dbo.DbConnections;
+
+CREATE TABLE dbo.DbConnections (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    Name NVARCHAR(255) NOT NULL,
+    ConnectionString NVARCHAR(MAX) NOT NULL, -- Stored as AES-256 Encrypted Base64
+    ProviderType NVARCHAR(100) NOT NULL DEFAULT 'SqlServer',
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
 CREATE TABLE dbo.BusinessRules (
     Id INT IDENTITY(1,1) PRIMARY KEY,
     Name NVARCHAR(255) NOT NULL,
     Description NVARCHAR(MAX) NULL,
     RuleType NVARCHAR(50) NOT NULL, -- 'TSQL' or 'CSharp'
     Code NVARCHAR(MAX) NOT NULL,
-    IsActive BIT NOT NULL DEFAULT 1
+    ConnectionId INT NULL, -- Optional: Link to a specific database
+    IsActive BIT NOT NULL DEFAULT 1,
+    CONSTRAINT FK_BusinessRules_Connection FOREIGN KEY (ConnectionId) REFERENCES dbo.DbConnections(Id)
 );
 
 CREATE TABLE dbo.BusinessRuleBundles (
@@ -161,12 +226,26 @@ CREATE TABLE dbo.BusinessRuleBundleItems (
 
 #### **PostgreSQL Schema**
 ```sql
+DROP TABLE IF EXISTS BusinessRuleBundleItems;
+DROP TABLE IF EXISTS BusinessRuleBundles;
+DROP TABLE IF EXISTS BusinessRules;
+DROP TABLE IF EXISTS DbConnections;
+
+CREATE TABLE DbConnections (
+    Id SERIAL PRIMARY KEY,
+    Name VARCHAR(255) NOT NULL,
+    ConnectionString TEXT NOT NULL,
+    ProviderType VARCHAR(100) NOT NULL DEFAULT 'SqlServer',
+    CreatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE BusinessRules (
     Id SERIAL PRIMARY KEY,
     Name VARCHAR(255) NOT NULL,
     Description TEXT NULL,
     RuleType VARCHAR(50) NOT NULL,
     Code TEXT NOT NULL,
+    ConnectionId INT REFERENCES DbConnections(Id),
     IsActive BOOLEAN NOT NULL DEFAULT TRUE
 );
 
@@ -186,13 +265,28 @@ CREATE TABLE BusinessRuleBundleItems (
 
 #### **MySQL Schema**
 ```sql
+DROP TABLE IF EXISTS BusinessRuleBundleItems;
+DROP TABLE IF EXISTS BusinessRuleBundles;
+DROP TABLE IF EXISTS BusinessRules;
+DROP TABLE IF EXISTS DbConnections;
+
+CREATE TABLE DbConnections (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    Name VARCHAR(255) NOT NULL,
+    ConnectionString TEXT NOT NULL,
+    ProviderType VARCHAR(100) NOT NULL DEFAULT 'SqlServer',
+    CreatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE BusinessRules (
     Id INT AUTO_INCREMENT PRIMARY KEY,
     Name VARCHAR(255) NOT NULL,
     Description TEXT NULL,
     RuleType VARCHAR(50) NOT NULL,
     Code TEXT NOT NULL,
-    IsActive BOOLEAN NOT NULL DEFAULT TRUE
+    ConnectionId INT,
+    IsActive BOOLEAN NOT NULL DEFAULT TRUE,
+    FOREIGN KEY (ConnectionId) REFERENCES DbConnections(Id)
 );
 
 CREATE TABLE BusinessRuleBundles (
@@ -274,6 +368,12 @@ public class XmlRuleStore : IBusinessRuleStore
 
     public Task<BusinessRuleBundle?> GetBusinessRuleBundleByNameAsync(string name) => 
         Task.FromResult(_bundles.FirstOrDefault(b => b.Name == name));
+
+    public Task<DbConnectionDefinition?> GetDbConnectionByIdAsync(int id) => 
+        Task.FromResult((DbConnectionDefinition?)null); // Implement if using XML connections
+
+    public Task<IEnumerable<DbConnectionDefinition>> GetAllDbConnectionsAsync() => 
+        Task.FromResult(Enumerable.Empty<DbConnectionDefinition>());
 }
 ```
 
@@ -290,6 +390,7 @@ The engine expects your API to return data in a structure like this:
       "name": "CheckInventory",
       "ruleType": "CSharp",
       "code": "return Items.All(i => i.InStock);",
+      "connectionId": null,
       "isActive": true
     }
   ],
@@ -325,6 +426,12 @@ public class ApiRuleStore : IBusinessRuleStore
         var doc = XDocument.Parse(xmlString);
         return ParseBundleFromXml(doc);
     }
+
+    public async Task<DbConnectionDefinition?> GetDbConnectionByIdAsync(int id) =>
+        await _http.GetFromJsonAsync<DbConnectionDefinition>($"https://api.rules.com/connections/{id}");
+
+    public async Task<IEnumerable<DbConnectionDefinition>> GetAllDbConnectionsAsync() =>
+        await _http.GetFromJsonAsync<IEnumerable<DbConnectionDefinition>>("https://api.rules.com/connections") ?? new List<DbConnectionDefinition>();
 }
 ```
 
@@ -335,6 +442,11 @@ In your `Program.cs` (or where you setup your services), tell your app how to us
 
 ```csharp
 builder.Services.AddScoped<IBusinessRuleStore, AppRuleStore>();
+
+// Register all supported database providers
+builder.Services.AddScoped<IRuleDbProvider, SqlServerRuleDbProvider>();
+builder.Services.AddScoped<IRuleDbProvider, PostgresRuleDbProvider>();
+
 builder.Services.AddScoped<BusinessRuleEngine<PizzaAppContext>>();
 ```
 

@@ -21,6 +21,7 @@ builder.Services.AddScoped<IBusinessRuleStore>(sp => sp.GetRequiredService<SqlDa
 builder.Services.AddScoped<IRuleDbProvider, SqlServerRuleDbProvider>();
 builder.Services.AddScoped<DtsxLoaderSettingsService>();
 builder.Services.AddScoped<DtsxLoaderExecutionService>();
+builder.Services.AddSingleton<IEncryptionService, AesEncryptionService>();
 builder.Services.AddScoped<BusinessRuleEngine<BusinessRuleContext>>();
 
 var app = builder.Build();

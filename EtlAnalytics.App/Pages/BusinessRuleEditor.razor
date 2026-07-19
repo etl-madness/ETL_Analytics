@@ -5,13 +5,23 @@
 
 <RadzenStack Gap="1.5rem" Style="padding: 1rem;">
     <RadzenRow Gap="1rem">
-        <RadzenColumn Size="12" SizeMD="8">
+        <RadzenColumn Size="12" SizeMD="4">
             <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.25rem;">Rule Name</RadzenText>
             <RadzenTextBox @bind-Value="Rule.Name" Style="width: 100%;" />
         </RadzenColumn>
         <RadzenColumn Size="12" SizeMD="4">
             <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.25rem;">Rule Type</RadzenText>
             <RadzenDropDown @bind-Value="Rule.RuleType" Data="@ruleTypes" Style="width: 100%;" />
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="4">
+            <RadzenText TextStyle="TextStyle.Subtitle2" Style="color: #475569; font-weight: 600; margin-bottom: 0.25rem;">Database Connection</RadzenText>
+            <RadzenDropDown @bind-Value="Rule.ConnectionId" 
+                            Data="@connections" 
+                            TextProperty="Name" 
+                            ValueProperty="Id" 
+                            Placeholder="Default Database" 
+                            AllowClear="true" 
+                            Style="width: 100%;" />
         </RadzenColumn>
     </RadzenRow>
 
@@ -41,6 +51,12 @@
     [Parameter] public BusinessRule Rule { get; set; } = new();
     private bool isSaving;
     private List<RuleType> ruleTypes = Enum.GetValues<RuleType>().ToList();
+    private List<DbConnectionDefinition> connections = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        connections = (await DbService.GetAllDbConnectionsAsync()).ToList();
+    }
 
     private async Task SaveAsync()
     {

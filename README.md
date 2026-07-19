@@ -93,14 +93,14 @@ $env:DB_CONNECTION_STRING = "Data Source=SERVER;Initial Catalog=DB;Trusted_Conne
 2. Build and run:
 
 ```bash
-dotnet build AutoSysJilBlazor/AutoSysJilBlazor.csproj
-dotnet run --project AutoSysJilBlazor/AutoSysJilBlazor.csproj
+dotnet build EtlAnalytics.App/EtlAnalytics.App.csproj
+dotnet run --project EtlAnalytics.App/EtlAnalytics.App.csproj
 ```
 
 ## Publish
 
 ```bash
-dotnet publish AutoSysJilBlazor/AutoSysJilBlazor.csproj -c Release -r win-x64 --self-contained true
+dotnet publish EtlAnalytics.App/EtlAnalytics.App.csproj -c Release -r win-x64 --self-contained true
 ```
 
 Copy the publish output to the target machine and run the generated executable.

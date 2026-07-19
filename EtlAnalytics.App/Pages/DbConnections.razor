@@ -1,0 +1,96 @@
+@page "/db-connections"
+@using EtlAnalytics.App.Models
+@using EtlAnalytics.App.Services
+@inject SqlDatabaseService DbService
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<PageTitle>Database Connections</PageTitle>
+
+<RadzenStack Gap="1rem" Style="padding: 1.5rem;">
+    <RadzenRow AlignItems="AlignItems.Center">
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenText TextStyle="TextStyle.H4" Style="font-weight: 700; margin: 0; color: #0f172a;">Database Connections</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" Style="color: #64748b;">Manage external database connections for cross-database business rules.</RadzenText>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" Style="text-align: right;">
+            <RadzenButton Icon="add" Text="Add Connection" ButtonStyle="ButtonStyle.Primary" Click="@(() => EditConnection(new DbConnectionDefinition { ProviderType = "SqlServer" }))" />
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenDataGrid Data="@connections" TItem="DbConnectionDefinition" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10">
+        <Columns>
+            <RadzenDataGridColumn TItem="DbConnectionDefinition" Property="Name" Title="Name" Width="200px">
+                <Template Context="conn">
+                    <span style="font-weight: 600; color: #1e293b;">@conn.Name</span>
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="DbConnectionDefinition" Property="ProviderType" Title="Provider" Width="150px">
+                <Template Context="conn">
+                    <RadzenBadge BadgeStyle="BadgeStyle.Info" Text="@conn.ProviderType" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="DbConnectionDefinition" Property="ConnectionString" Title="Connection String">
+                <Template Context="conn">
+                    <code style="font-size: 0.8rem; color: #475569;">********</code>
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="DbConnectionDefinition" Property="CreatedAt" Title="Created" Width="180px">
+                <Template Context="conn">
+                    @conn.CreatedAt.ToString("MMM dd, yyyy HH:mm")
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="DbConnectionDefinition" Filterable="false" Sortable="false" TextAlign="TextAlign.Right" Width="120px">
+                <Template Context="conn">
+                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="() => EditConnection(conn)" />
+                    <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Click="() => ConfirmDelete(conn)" Style="margin-left: 0.5rem;" />
+                </Template>
+            </RadzenDataGridColumn>
+        </Columns>
+    </RadzenDataGrid>
+</RadzenStack>
+
+@code {
+    private List<DbConnectionDefinition> connections = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConnectionsAsync();
+    }
+
+    private async Task LoadConnectionsAsync()
+    {
+        connections = (await DbService.GetAllDbConnectionsAsync()).ToList();
+    }
+
+    private async Task EditConnection(DbConnectionDefinition connection)
+    {
+        var result = await DialogService.OpenAsync<DbConnectionEditor>($"{(connection.Id == 0 ? "Add" : "Edit")} Connection",
+            new Dictionary<string, object> { { "Connection", connection } },
+            new DialogOptions { Width = "600px" });
+
+        if (result != null)
+        {
+            await LoadConnectionsAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Success", "Connection saved successfully.");
+        }
+    }
+
+    private async Task ConfirmDelete(DbConnectionDefinition connection)
+    {
+        var confirm = await DialogService.Confirm($"Are you sure you want to delete the connection '{connection.Name}'?", "Delete Confirmation");
+        if (confirm == true)
+        {
+            try
+            {
+                await DbService.DeleteDbConnectionAsync(connection.Id);
+                await LoadConnectionsAsync();
+                NotificationService.Notify(NotificationSeverity.Success, "Deleted", "Connection removed.");
+            }
+            catch (Exception ex)
+            {
+                NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+            }
+        }
+    }
+}

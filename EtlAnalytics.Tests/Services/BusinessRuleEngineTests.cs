@@ -17,6 +17,7 @@ public class TestRuleStore : IBusinessRuleStore
 {
     public Dictionary<int, BusinessRule> Rules { get; set; } = new();
     public Dictionary<string, BusinessRuleBundle> Bundles { get; set; } = new();
+    public Dictionary<int, DbConnectionDefinition> Connections { get; set; } = new();
 
     public Task<BusinessRule?> GetBusinessRuleByIdAsync(int id)
     {
@@ -26,6 +27,16 @@ public class TestRuleStore : IBusinessRuleStore
     public Task<BusinessRuleBundle?> GetBusinessRuleBundleByNameAsync(string name)
     {
         return Task.FromResult(Bundles.TryGetValue(name, out var bundle) ? bundle : null);
+    }
+
+    public Task<DbConnectionDefinition?> GetDbConnectionByIdAsync(int id)
+    {
+        return Task.FromResult(Connections.TryGetValue(id, out var conn) ? conn : null);
+    }
+
+    public Task<IEnumerable<DbConnectionDefinition>> GetAllDbConnectionsAsync()
+    {
+        return Task.FromResult(Connections.Values.AsEnumerable());
     }
 }
 
@@ -42,7 +53,7 @@ public class BusinessRuleEngineTests
         {
             Environment.SetEnvironmentVariable("DB_CONNECTION_STRING", null);
 
-            Assert.Throws<InvalidOperationException>(() => _ = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), new TestRuleStore(), new SqlServerRuleDbProvider()));
+            Assert.Throws<InvalidOperationException>(() => _ = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), new TestRuleStore(), new[] { new SqlServerRuleDbProvider() }));
         }
         finally
         {
@@ -57,7 +68,7 @@ public class BusinessRuleEngineTests
         try
         {
             Environment.SetEnvironmentVariable("DB_CONNECTION_STRING", "Server=(local);Database=master;Trusted_Connection=True;");
-            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), new TestRuleStore(), new SqlServerRuleDbProvider());
+            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), new TestRuleStore(), new[] { new SqlServerRuleDbProvider() });
 
             var rule = new BusinessRule
             {
@@ -95,7 +106,7 @@ public class BusinessRuleEngineTests
         try
         {
             Environment.SetEnvironmentVariable("DB_CONNECTION_STRING", "Server=(local);Database=master;Trusted_Connection=True;");
-            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), new TestRuleStore(), new SqlServerRuleDbProvider());
+            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), new TestRuleStore(), new[] { new SqlServerRuleDbProvider() });
 
             var rule = new BusinessRule
             {
@@ -127,7 +138,7 @@ public class BusinessRuleEngineTests
             store.Rules[1] = new() { Id = 1, Name = "Seed", RuleType = RuleType.CSharp, Code = "1" };
             store.Rules[2] = new() { Id = 2, Name = "Increment", RuleType = RuleType.CSharp, Code = "(int)PreviousResult + 1" };
 
-            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), store, new SqlServerRuleDbProvider());
+            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), store, new[] { new SqlServerRuleDbProvider() });
 
             var bundle = new BusinessRuleBundle
             {
@@ -164,7 +175,7 @@ public class BusinessRuleEngineTests
             store.Rules[1] = new() { Id = 1, Name = "Seed", RuleType = RuleType.CSharp, Code = "1" };
             store.Rules[2] = new() { Id = 2, Name = "Increment", RuleType = RuleType.CSharp, Code = "(int)PreviousResult + 1" };
 
-            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), store, new SqlServerRuleDbProvider());
+            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), store, new[] { new SqlServerRuleDbProvider() });
 
             var bundle = new BusinessRuleBundle
             {
@@ -184,6 +195,53 @@ public class BusinessRuleEngineTests
             Assert.That(result, Is.EqualTo(2));
             Assert.That(logs.Any(x => x.Contains("Rule ID 999 not found. Skipping.", StringComparison.Ordinal)), Is.True);
             Assert.That(context.StepResults.Keys, Is.EquivalentTo(new[] { 1, 3 }));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DB_CONNECTION_STRING", original);
+        }
+    }
+
+    [Test]
+    public async Task ExecuteRuleAsync_TSQLRule_UsesCustomConnectionIfSpecified()
+    {
+        var original = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
+        try
+        {
+            Environment.SetEnvironmentVariable("DB_CONNECTION_STRING", "Server=Default;Database=master;Trusted_Connection=True;");
+            
+            var store = new TestRuleStore();
+            store.Connections[1] = new DbConnectionDefinition 
+            { 
+                Id = 1, 
+                Name = "AuditDB", 
+                ConnectionString = "Server=Audit;Database=AuditDB;Trusted_Connection=True;",
+                ProviderType = "SqlServer"
+            };
+
+            var engine = new BusinessRuleEngine<BusinessRuleContext>(CreateConfiguration(), store, new[] { new SqlServerRuleDbProvider() });
+
+            var rule = new BusinessRule
+            {
+                Name = "AuditQuery",
+                RuleType = RuleType.TSQL,
+                Code = "SELECT COUNT(*) FROM Logs",
+                ConnectionId = 1
+            };
+
+            var logs = new List<string>();
+            // This will fail because it tries to actually connect, but we can verify the logs
+            try 
+            {
+                await engine.ExecuteRuleAsync(rule, new BusinessRuleContext(), logs.Add);
+            }
+            catch (Exception) 
+            {
+                // Expected failure to connect to fake server
+            }
+
+            Assert.That(logs.Any(x => x.Contains("Using specific connection: AuditDB (SqlServer)", StringComparison.Ordinal)), Is.True);
+            Assert.That(logs.Any(x => x.Contains("[SQL] Executing T-SQL script...", StringComparison.Ordinal)), Is.True);
         }
         finally
         {

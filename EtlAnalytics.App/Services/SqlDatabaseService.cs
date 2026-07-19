@@ -16,11 +16,13 @@ public class SqlDatabaseService : IBusinessRuleStore
     }
 
     private readonly string _connectionString;
+    private readonly IEncryptionService _encryptionService;
 
-    public SqlDatabaseService(IConfiguration configuration)
+    public SqlDatabaseService(IConfiguration configuration, IEncryptionService encryptionService)
     {
         _connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
             ?? throw new InvalidOperationException("Environment variable 'DB_CONNECTION_STRING' is not set.");
+        _encryptionService = encryptionService;
     }
 
     public async Task<int> CreateTableIfNotExistsAsync(string tableName = "dbo.AutoSysJilJobs")
@@ -546,6 +548,17 @@ public class SqlDatabaseService : IBusinessRuleStore
     public async Task CreateBusinessRuleTablesIfNotExistsAsync()
     {
         const string sql = @"
+            IF OBJECT_ID('dbo.DbConnections', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.DbConnections (
+                    Id INT IDENTITY(1,1) PRIMARY KEY,
+                    Name NVARCHAR(255) NOT NULL,
+                    ConnectionString NVARCHAR(MAX) NOT NULL,
+                    ProviderType NVARCHAR(100) NOT NULL DEFAULT 'SqlServer',
+                    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+                );
+            END;
+
             IF OBJECT_ID('dbo.BusinessRules', 'U') IS NULL
             BEGIN
                 CREATE TABLE dbo.BusinessRules (
@@ -555,10 +568,20 @@ public class SqlDatabaseService : IBusinessRuleStore
                     RuleType NVARCHAR(50) NOT NULL,
                     Code NVARCHAR(MAX) NOT NULL,
                     Version INT NOT NULL DEFAULT 1,
+                    ConnectionId INT NULL,
                     IsActive BIT NOT NULL DEFAULT 1,
                     CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-                    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+                    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT FK_BusinessRules_Connection FOREIGN KEY (ConnectionId) REFERENCES dbo.DbConnections(Id)
                 );
+            END
+            ELSE
+            BEGIN
+                IF COL_LENGTH('dbo.BusinessRules', 'ConnectionId') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.BusinessRules ADD ConnectionId INT NULL;
+                    ALTER TABLE dbo.BusinessRules ADD CONSTRAINT FK_BusinessRules_Connection FOREIGN KEY (ConnectionId) REFERENCES dbo.DbConnections(Id);
+                END
             END;
 
             IF OBJECT_ID('dbo.BusinessRuleHistory', 'U') IS NULL
@@ -638,8 +661,8 @@ public class SqlDatabaseService : IBusinessRuleStore
     public async Task<int> InsertBusinessRuleAsync(BusinessRule rule)
     {
         const string sql = @"
-            INSERT INTO dbo.BusinessRules (Name, Description, RuleType, Code, Version, IsActive, CreatedAt, UpdatedAt)
-            VALUES (@Name, @Description, @RuleType, @Code, 1, 1, SYSUTCDATETIME(), SYSUTCDATETIME());
+            INSERT INTO dbo.BusinessRules (Name, Description, RuleType, Code, Version, ConnectionId, IsActive, CreatedAt, UpdatedAt)
+            VALUES (@Name, @Description, @RuleType, @Code, 1, @ConnectionId, 1, SYSUTCDATETIME(), SYSUTCDATETIME());
             SELECT CAST(SCOPE_IDENTITY() AS INT);
         ";
         await using var connection = new SqlConnection(_connectionString);
@@ -661,6 +684,7 @@ public class SqlDatabaseService : IBusinessRuleStore
                 Description = @Description,
                 RuleType = @RuleType,
                 Code = @Code,
+                ConnectionId = @ConnectionId,
                 Version = Version + 1,
                 UpdatedAt = SYSUTCDATETIME()
             WHERE Id = @Id;
@@ -814,6 +838,84 @@ public class SqlDatabaseService : IBusinessRuleStore
             bundle.Items = items.ToList();
         }
         return bundle;
+    }
+
+    public async Task<DbConnectionDefinition?> GetDbConnectionByIdAsync(int id)
+    {
+        const string sql = "SELECT * FROM dbo.DbConnections WHERE Id = @Id;";
+        await using var connection = new SqlConnection(_connectionString);
+        var dbConn = await connection.QueryFirstOrDefaultAsync<DbConnectionDefinition>(sql, new { Id = id });
+        if (dbConn != null)
+        {
+            dbConn.ConnectionString = _encryptionService.Decrypt(dbConn.ConnectionString);
+        }
+        return dbConn;
+    }
+
+    public async Task<IEnumerable<DbConnectionDefinition>> GetAllDbConnectionsAsync()
+    {
+        const string sql = "SELECT * FROM dbo.DbConnections ORDER BY Name;";
+        await using var connection = new SqlConnection(_connectionString);
+        var conns = (await connection.QueryAsync<DbConnectionDefinition>(sql)).ToList();
+        foreach (var conn in conns)
+        {
+            conn.ConnectionString = _encryptionService.Decrypt(conn.ConnectionString);
+        }
+        return conns;
+    }
+
+    public async Task<int> InsertDbConnectionAsync(DbConnectionDefinition conn)
+    {
+        var encryptedConn = new DbConnectionDefinition
+        {
+            Name = conn.Name,
+            ProviderType = conn.ProviderType,
+            ConnectionString = _encryptionService.Encrypt(conn.ConnectionString)
+        };
+
+        const string sql = @"
+            INSERT INTO dbo.DbConnections (Name, ConnectionString, ProviderType, CreatedAt)
+            VALUES (@Name, @ConnectionString, @ProviderType, SYSUTCDATETIME());
+            SELECT CAST(SCOPE_IDENTITY() AS INT);
+        ";
+        await using var connection = new SqlConnection(_connectionString);
+        return await connection.ExecuteScalarAsync<int>(sql, encryptedConn);
+    }
+
+    public async Task UpdateDbConnectionAsync(DbConnectionDefinition conn)
+    {
+        var encryptedConn = new DbConnectionDefinition
+        {
+            Id = conn.Id,
+            Name = conn.Name,
+            ProviderType = conn.ProviderType,
+            ConnectionString = _encryptionService.Encrypt(conn.ConnectionString)
+        };
+
+        const string sql = @"
+            UPDATE dbo.DbConnections
+            SET Name = @Name,
+                ConnectionString = @ConnectionString,
+                ProviderType = @ProviderType
+            WHERE Id = @Id;
+        ";
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.ExecuteAsync(sql, encryptedConn);
+    }
+
+    public async Task DeleteDbConnectionAsync(int id)
+    {
+        // First check if any rules are using this connection
+        const string checkSql = "SELECT COUNT(*) FROM dbo.BusinessRules WHERE ConnectionId = @Id AND IsActive = 1;";
+        await using var connection = new SqlConnection(_connectionString);
+        var count = await connection.ExecuteScalarAsync<int>(checkSql, new { Id = id });
+        if (count > 0)
+        {
+            throw new InvalidOperationException($"Cannot delete connection. It is being used by {count} business rules.");
+        }
+
+        const string sql = "DELETE FROM dbo.DbConnections WHERE Id = @Id;";
+        await connection.ExecuteAsync(sql, new { Id = id });
     }
 }
 
